@@ -6,6 +6,7 @@ import https from 'node:https';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import axios from 'axios';
+import { ProgressTracker } from './progress-tracker';
 
 const REPO_OWNER = 'rafa203gt';
 const REPO_NAME = 'Rafa-MC-LAUNCHER';
@@ -48,6 +49,22 @@ export interface UpdateDownloadProgress {
 export class AppUpdater {
   private isDownloading = false;
 
+  public getRealExecutablePath(): string {
+    // In electron-builder portable builds, PORTABLE_EXECUTABLE_FILE points to the real .exe file
+    if (process.env.PORTABLE_EXECUTABLE_FILE && fs.existsSync(process.env.PORTABLE_EXECUTABLE_FILE)) {
+      return process.env.PORTABLE_EXECUTABLE_FILE;
+    }
+    return process.execPath;
+  }
+
+  public getRealExecutableDir(): string {
+    if (process.env.PORTABLE_EXECUTABLE_DIR && fs.existsSync(process.env.PORTABLE_EXECUTABLE_DIR)) {
+      return process.env.PORTABLE_EXECUTABLE_DIR;
+    }
+    const execPath = this.getRealExecutablePath();
+    return path.dirname(execPath);
+  }
+
   public async checkForUpdates(): Promise<AppUpdateInfo> {
     const currentVersion = app.getVersion();
 
@@ -73,22 +90,22 @@ export class AppUpdater {
         return { hasUpdate: false, currentVersion, latestVersion: rawTag };
       }
 
-      // Check if current running app is a portable single exe
-      const currentExecPath = process.execPath;
-      const isPortableOrDirectExe =
-        currentExecPath.toLowerCase().endsWith('.exe') &&
-        !currentExecPath.toLowerCase().includes('electron.exe') &&
-        !currentExecPath.toLowerCase().includes('node_modules');
+      const realExecPath = this.getRealExecutablePath().toLowerCase();
+      const isInstalledNsis = realExecPath.includes('appdata\\local\\programs');
 
-      // Prefer matching asset: portable exe if running standalone exe, or installer
+      // If running installed version, prefer Setup installer. Otherwise prefer standalone Portable .exe
       let targetAsset: any = null;
-      if (isPortableOrDirectExe && !currentExecPath.toLowerCase().includes('appdata\\local\\programs')) {
+      if (isInstalledNsis) {
         targetAsset = release.assets?.find(
-          (a: any) =>
-            a.name.endsWith('.exe') && !a.name.toLowerCase().includes('setup')
+          (a: any) => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
+        );
+      } else {
+        targetAsset = release.assets?.find(
+          (a: any) => a.name.endsWith('.exe') && !a.name.toLowerCase().includes('setup')
         );
       }
 
+      // Fallback
       if (!targetAsset) {
         targetAsset =
           release.assets?.find(
@@ -133,51 +150,77 @@ export class AppUpdater {
         }
       });
 
-      const currentExecPath = process.execPath;
+      const realExecPath = this.getRealExecutablePath();
+      const realExecDir = this.getRealExecutableDir();
       const pid = process.pid;
+      const isInstaller = fileName.toLowerCase().includes('setup');
+
+      console.log(`[AppUpdater] Actualización lista. Ruta real del ejecutable: ${realExecPath}`);
+      console.log(`[AppUpdater] Directorio de guardado: ${realExecDir}`);
 
       if (process.platform === 'win32') {
-        const isInstaller = fileName.toLowerCase().includes('setup');
-
         if (isInstaller) {
-          // If it is NSIS Setup installer, run directly and quit
+          // If it is NSIS Setup installer, execute it directly
           const child = spawn(targetDownloadedPath, [], {
             detached: true,
             stdio: 'ignore'
           });
           child.unref();
         } else {
-          // Clean, completely invisible PowerShell updater (zero black console windows/tabs)
-          const psCommand = `
+          // Robust PowerShell Updater with retry loop and full logging
+          const newFileNameInDir = path.join(realExecDir, fileName || 'Rafa-MC-LAUNCHER.exe');
+          const logFile = path.join(tempDir, 'rafa_updater.log');
+
+          const psScript = `
+            $log = '${logFile.replace(/'/g, "''")}';
+            "Starting update worker at $(Get-Date)" | Out-File $log;
+            
             $oldPid = ${pid};
             $newExe = '${targetDownloadedPath.replace(/'/g, "''")}';
-            $currExe = '${currentExecPath.replace(/'/g, "''")}';
+            $currExe = '${realExecPath.replace(/'/g, "''")}';
+            $destNamedExe = '${newFileNameInDir.replace(/'/g, "''")}';
             
+            "Waiting for process $oldPid to exit..." | Out-File $log -Append;
             try {
               $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue;
               if ($proc) {
-                $proc.WaitForExit(5000);
+                $proc.WaitForExit(10000);
               }
-            } catch {}
+            } catch {
+              "Process already exited or not found" | Out-File $log -Append;
+            }
             
-            Start-Sleep -Milliseconds 800;
+            Start-Sleep -Milliseconds 1000;
             
-            for ($i = 0; $i -lt 10; $i++) {
+            $copied = $false;
+            for ($i = 0; $i -lt 30; $i++) {
               try {
+                "Attempt $($i+1): Copying $newExe to $currExe" | Out-File $log -Append;
                 Copy-Item -Path $newExe -Destination $currExe -Force -ErrorAction Stop;
-                Remove-Item -Path $newExe -Force -ErrorAction SilentlyContinue;
+                if ($currExe -ne $destNamedExe) {
+                  Copy-Item -Path $newExe -Destination $destNamedExe -Force -ErrorAction SilentlyContinue;
+                }
+                $copied = $true;
+                "Copy successful!" | Out-File $log -Append;
                 break;
               } catch {
+                "Copy failed: $_" | Out-File $log -Append;
                 Start-Sleep -Milliseconds 500;
               }
             }
             
-            Start-Process -FilePath $currExe;
+            if ($copied) {
+              "Starting updated executable: $currExe" | Out-File $log -Append;
+              Start-Process -FilePath $currExe;
+            } else {
+              "Starting fallback new named executable: $destNamedExe" | Out-File $log -Append;
+              Start-Process -FilePath $newExe;
+            }
           `.trim().replace(/\r?\n\s*/g, ' ');
 
           const helper = spawn(
             'powershell.exe',
-            ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psCommand],
+            ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript],
             {
               detached: true,
               stdio: 'ignore',
@@ -190,10 +233,10 @@ export class AppUpdater {
         await shell.openPath(targetDownloadedPath);
       }
 
-      // Exit immediately so old process releases the file lock
+      // Terminate cleanly to release Windows file locks
       setTimeout(() => {
         app.quit();
-        setTimeout(() => app.exit(0), 300);
+        setTimeout(() => app.exit(0), 400);
       }, 500);
     } catch (err: any) {
       this.isDownloading = false;
@@ -234,9 +277,11 @@ export class AppUpdater {
 
     const chunkFiles: string[] = [];
     const chunkProgress: number[] = new Array(segmentsCount).fill(0);
+    const tracker = new ProgressTracker(totalBytes);
 
     const updateCombined = () => {
       const loaded = chunkProgress.reduce((a, b) => a + b, 0);
+      tracker.update(loaded);
       onProgress(loaded, totalBytes);
     };
 
