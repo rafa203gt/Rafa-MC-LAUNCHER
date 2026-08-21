@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Box, FolderOpen, RefreshCw, Search, CheckCircle2, FileCode } from 'lucide-react';
 import { InstalledMod } from '../types';
 
@@ -64,9 +64,11 @@ export const ModpackView: React.FC = () => {
     }
   };
 
-  const filteredMods = mods.filter((m) =>
-    m.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredMods = useMemo(() => {
+    if (!search.trim()) return mods;
+    const query = search.toLowerCase();
+    return mods.filter((m) => m.name.toLowerCase().includes(query));
+  }, [mods, search]);
 
   return (
     <div className="space-y-6">

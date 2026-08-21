@@ -6,6 +6,7 @@ import http from 'node:http';
 import axios from 'axios';
 import { createRequire } from 'node:module';
 import { configStore } from './config-store';
+import { ProgressTracker } from './progress-tracker';
 
 const require = createRequire(import.meta.url);
 const AdmZip = require('adm-zip');
@@ -359,23 +360,19 @@ export class ModSynchronizer {
 
     const chunkFiles: string[] = [];
     const chunkProgress: number[] = new Array(segmentsCount).fill(0);
-    const startTime = Date.now();
+    const tracker = new ProgressTracker(totalBytes);
 
     const updateCombinedProgress = () => {
       if (!onProgress) return;
       const loaded = chunkProgress.reduce((a, b) => a + b, 0);
-      const percent = Math.min(100, Math.round((loaded / totalBytes) * 100));
-      const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
-      const speedMBs = loaded / 1024 / 1024 / elapsedSec;
-      const remainingBytes = Math.max(0, totalBytes - loaded);
-      const remainingSec = speedMBs > 0 ? Math.round(remainingBytes / 1024 / 1024 / speedMBs) : 0;
+      const metrics = tracker.update(loaded);
 
       onProgress({
         stage: 'mods',
-        task: `⚡ Descarga Turbo (${segmentsCount} hilos): ${(loaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB — ${speedMBs.toFixed(1)} MB/s (${remainingSec}s restantes)`,
+        task: `⚡ Descarga Turbo (${segmentsCount} hilos): ${metrics.loadedMB} / ${metrics.totalMB} MB — ${metrics.speedMBs} MB/s (${metrics.etaFormatted})`,
         total: totalBytes,
         current: loaded,
-        percent
+        percent: metrics.percent
       });
     };
 

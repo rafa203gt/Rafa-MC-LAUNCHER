@@ -5,6 +5,7 @@ import http from 'node:http';
 import axios from 'axios';
 import { createRequire } from 'node:module';
 import { configStore } from './config-store';
+import { ProgressTracker } from './progress-tracker';
 
 const require = createRequire(import.meta.url);
 const AdmZip = require('adm-zip');
@@ -100,18 +101,19 @@ export class JavaManager {
     const zipPath = path.join(this.runtimeDir, `temurin${version}.zip`);
     const downloadUrl = `https://api.adoptium.net/v3/binary/latest/${version}/ga/windows/x64/jdk/hotspot/normal/eclipse`;
 
-    const startTime = Date.now();
+    let tracker: ProgressTracker | null = null;
     await this.downloadMultiSegmentFile(downloadUrl, zipPath, (loaded, total) => {
-      if (onProgress && total > 0) {
-        const percent = Math.min(100, Math.round((loaded / total) * 100));
-        const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
-        const mbps = (loaded / 1024 / 1024 / elapsed).toFixed(1);
+      if (!tracker && total > 0) {
+        tracker = new ProgressTracker(total);
+      }
+      if (onProgress && tracker) {
+        const metrics = tracker.update(loaded);
         onProgress({
           stage: 'java',
-          task: `⚡ Descargando Java ${version}: ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB (${mbps} MB/s)`,
+          task: `⚡ Descargando Java ${version}: ${metrics.loadedMB} / ${metrics.totalMB} MB — ${metrics.speedMBs} MB/s (${metrics.etaFormatted})`,
           total,
           current: loaded,
-          percent
+          percent: metrics.percent
         });
       }
     });

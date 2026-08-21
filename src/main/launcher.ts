@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import https from 'node:https';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
@@ -8,6 +9,7 @@ import { createRequire } from 'node:module';
 import { configStore, AppSettings } from './config-store';
 import { javaManager, DownloadProgress } from './java-manager';
 import { modSynchronizer } from './mod-sync';
+import { ProgressTracker } from './progress-tracker';
 
 const require = createRequire(import.meta.url);
 const { Client, Authenticator } = require('minecraft-launcher-core');
@@ -141,18 +143,17 @@ export class MinecraftLauncher {
         fs.writeFileSync(vanillaJsonPath, JSON.stringify(vJsonRes.data, null, 2), 'utf-8');
         const clientUrl = vJsonRes.data.downloads.client.url;
 
-        const startTime = Date.now();
+        let tracker: ProgressTracker | null = null;
         await this.downloadFastStream(clientUrl, vanillaJarPath, (loaded, total) => {
-          if (onProgress && total > 0) {
-            const percent = Math.min(100, Math.round((loaded / total) * 100));
-            const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
-            const mbps = (loaded / 1024 / 1024 / elapsed).toFixed(1);
+          if (!tracker && total > 0) tracker = new ProgressTracker(total);
+          if (onProgress && tracker) {
+            const metrics = tracker.update(loaded);
             onProgress({
               stage: 'assets',
-              task: `⚡ Descargando cliente Minecraft ${mcVersion}: ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB (${mbps} MB/s)`,
+              task: `⚡ Descargando cliente Minecraft ${mcVersion}: ${metrics.loadedMB} / ${metrics.totalMB} MB — ${metrics.speedMBs} MB/s (${metrics.etaFormatted})`,
               total,
               current: loaded,
-              percent
+              percent: metrics.percent
             });
           }
         });
@@ -166,18 +167,17 @@ export class MinecraftLauncher {
 
       if (onLog) onLog(`[Launcher] Descargando instalador de NeoForge ${neoForgeVersion}...`);
 
-      const startTime = Date.now();
+      let tracker: ProgressTracker | null = null;
       await this.downloadFastStream(installerUrl, tempInstaller, (loaded, total) => {
-        if (onProgress && total > 0) {
-          const percent = Math.min(100, Math.round((loaded / total) * 100));
-          const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
-          const mbps = (loaded / 1024 / 1024 / elapsed).toFixed(1);
+        if (!tracker && total > 0) tracker = new ProgressTracker(total);
+        if (onProgress && tracker) {
+          const metrics = tracker.update(loaded);
           onProgress({
             stage: 'assets',
-            task: `⚡ Descargando instalador NeoForge ${neoForgeVersion}: ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB (${mbps} MB/s)`,
+            task: `⚡ Descargando instalador NeoForge ${neoForgeVersion}: ${metrics.loadedMB} / ${metrics.totalMB} MB — ${metrics.speedMBs} MB/s (${metrics.etaFormatted})`,
             total,
             current: loaded,
-            percent
+            percent: metrics.percent
           });
         }
       });
@@ -396,8 +396,16 @@ export class MinecraftLauncher {
       const cleanUsername = (options.username || settings.username || 'Jugador').trim();
       const auth = Authenticator.getAuth(cleanUsername);
 
-      const minMemory = `${options.minRam || settings.minRam || 4096}M`;
-      const maxMemory = `${options.maxRam || settings.maxRam || 8192}M`;
+      // Safe RAM Calculation: Prevent allocating more than physical memory & reserve at least 1.5GB for Windows/OS
+      const totalSystemRamMB = Math.floor(os.totalmem() / 1024 / 1024);
+      const safeMaxHostRamMB = Math.max(2048, totalSystemRamMB - 1536);
+      const requestedMaxRam = options.maxRam || settings.maxRam || 8192;
+      const finalMaxRam = Math.min(requestedMaxRam, safeMaxHostRamMB);
+      const finalMinRam = Math.min(finalMaxRam, options.minRam || settings.minRam || 4096);
+
+      const minMemory = `${finalMinRam}M`;
+      const maxMemory = `${finalMaxRam}M`;
+      onLog(`[Launcher] Memoria RAM asignada: Min=${minMemory}, Max=${maxMemory} (RAM total equipo: ${totalSystemRamMB}MB)`);
 
       // Dynamic JVM Module Arguments for NeoForge / Forge / Fabric
       const libDir = path.join(instanceDir, 'libraries');
@@ -430,9 +438,31 @@ export class MinecraftLauncher {
         ];
       }
 
+      // Flags de Garbage Collection G1GC Ultra-Optimizado (Anti-Lag, Anti-Stutter para modpacks pesados)
+      const performanceGcArgs = [
+        '-XX:+UseG1GC',
+        '-XX:+ParallelRefProcEnabled',
+        '-XX:MaxGCPauseMillis=100',
+        '-XX:+UnlockExperimentalVMOptions',
+        '-XX:+DisableExplicitGC',
+        '-XX:+AlwaysPreTouch',
+        '-XX:G1NewSizePercent=30',
+        '-XX:G1MaxNewSizePercent=40',
+        '-XX:G1ReservePercent=20',
+        '-XX:G1HeapWastePercent=5',
+        '-XX:G1MixedGCCountTarget=4',
+        '-XX:InitiatingHeapOccupancyPercent=15',
+        '-XX:G1MixedGCLiveThresholdPercent=90',
+        '-XX:G1RSetUpdatingPauseTimePercent=5',
+        '-XX:SurvivorRatio=32',
+        '-XX:+PerfDisableSharedMem',
+        '-XX:MaxTenuringThreshold=1'
+      ];
+
       // Flags obligatorios de acceso a módulos de Java 17/21 para NeoForge, Forge y Fabric
       const javaModuleArgs = [
         ...neoForgeJvmArgs,
+        ...performanceGcArgs,
         '--add-opens=java.base/java.lang.invoke=cpw.mods.securejarhandler,ALL-UNNAMED',
         '--add-opens=java.base/java.util.jar=cpw.mods.securejarhandler,ALL-UNNAMED',
         '--add-opens=java.base/java.lang=ALL-UNNAMED',

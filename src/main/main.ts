@@ -10,6 +10,21 @@ import { minecraftLauncher } from './launcher';
 import { appUpdater } from './app-updater';
 import { instanceManager } from './instance-manager';
 
+// Global error handlers to prevent sudden crashes
+process.on('uncaughtException', (err) => {
+  console.error('[CRITICAL] Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRITICAL] Unhandled promise rejection:', reason);
+});
+
+// Hardware Acceleration & High-Performance Flags
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
