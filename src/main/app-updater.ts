@@ -10,19 +10,23 @@ import axios from 'axios';
 const REPO_OWNER = 'rafa203gt';
 const REPO_NAME = 'Rafa-MC-LAUNCHER';
 
-// High performance connection agents with Keep-Alive
+// Extreme performance network agent with TCP low-latency tuning
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
-  timeout: 60000
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
-  timeout: 60000
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 export interface AppUpdateInfo {
@@ -69,12 +73,29 @@ export class AppUpdater {
         return { hasUpdate: false, currentVersion, latestVersion: rawTag };
       }
 
-      // Find Windows executable asset (installer or portable exe)
-      const winAsset =
-        release.assets?.find(
+      // Check if current running app is a portable single exe
+      const currentExecPath = process.execPath;
+      const isPortableOrDirectExe =
+        currentExecPath.toLowerCase().endsWith('.exe') &&
+        !currentExecPath.toLowerCase().includes('electron.exe') &&
+        !currentExecPath.toLowerCase().includes('node_modules');
+
+      // Prefer matching asset: portable exe if running standalone exe, or installer
+      let targetAsset: any = null;
+      if (isPortableOrDirectExe && !currentExecPath.toLowerCase().includes('appdata\\local\\programs')) {
+        targetAsset = release.assets?.find(
           (a: any) =>
-            a.name.endsWith('.exe') && (a.name.includes('Setup') || a.name.includes('LAUNCHER'))
-        ) || release.assets?.[0];
+            a.name.endsWith('.exe') && !a.name.toLowerCase().includes('setup')
+        );
+      }
+
+      if (!targetAsset) {
+        targetAsset =
+          release.assets?.find(
+            (a: any) =>
+              a.name.endsWith('.exe') && (a.name.includes('Setup') || a.name.includes('LAUNCHER'))
+          ) || release.assets?.[0];
+      }
 
       return {
         hasUpdate: true,
@@ -82,8 +103,8 @@ export class AppUpdater {
         latestVersion: rawTag,
         releaseName: release.name || `Versión ${rawTag}`,
         releaseNotes: release.body || 'Nuevas mejoras y correcciones del launcher.',
-        downloadUrl: winAsset?.browser_download_url,
-        fileName: winAsset?.name || `Rafa-MC-LAUNCHER-Setup-${rawTag}.exe`
+        downloadUrl: targetAsset?.browser_download_url,
+        fileName: targetAsset?.name || `Rafa-MC-LAUNCHER-${rawTag}.exe`
       };
     } catch (err: any) {
       console.warn(`[AppUpdater] No se pudo verificar actualizaciones: ${err.message}`);
@@ -101,33 +122,85 @@ export class AppUpdater {
 
     try {
       const tempDir = os.tmpdir();
-      const targetPath = path.join(tempDir, fileName || 'Rafa-Launcher-Update.exe');
+      const targetDownloadedPath = path.join(tempDir, `update_${Date.now()}_${fileName || 'Rafa-Launcher-Update.exe'}`);
 
-      console.log(`[AppUpdater] ⚡ Descargando actualización acelerada desde: ${downloadUrl}`);
+      console.log(`[AppUpdater] ⚡ Descargando actualización acelerada (16 hilos): ${downloadUrl}`);
 
-      await this.downloadMultiSegmentFile(downloadUrl, targetPath, (loaded, total) => {
+      await this.downloadMultiSegmentFile(downloadUrl, targetDownloadedPath, (loaded, total) => {
         if (onProgress) {
           const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
           onProgress({ percent, transferred: loaded, total });
         }
       });
 
-      console.log(`[AppUpdater] Actualización descargada con éxito. Ejecutando instalador...`);
+      console.log(`[AppUpdater] Actualización descargada. Iniciando auto-reemplazo desatendido...`);
 
-      // Execute installer and quit app
+      const currentExecPath = process.execPath;
+      const pid = process.pid;
+
       if (process.platform === 'win32') {
-        const child = spawn(targetPath, [], {
-          detached: true,
-          stdio: 'ignore'
-        });
-        child.unref();
+        const isInstaller = fileName.toLowerCase().includes('setup');
+
+        if (isInstaller) {
+          // If it is NSIS Setup installer, run with silent /S or normal flag and quit
+          const child = spawn(targetDownloadedPath, ['/S'], {
+            detached: true,
+            stdio: 'ignore'
+          });
+          child.unref();
+        } else {
+          // Hot-swap replacement batch script for portable .exe
+          const scriptPath = path.join(tempDir, `hotswap_updater_${Date.now()}.cmd`);
+          const batContent = `
+@echo off
+setlocal
+chcp 65001 >nul
+title Actualizando Rafa MC Launcher...
+
+echo ========================================================
+echo Actualizando ejecutable a la nueva version...
+echo ========================================================
+
+set OLD_PID=${pid}
+set NEW_EXE=${targetDownloadedPath}
+set CURRENT_EXE=${currentExecPath}
+
+:wait_loop
+tasklist /fi "PID eq %OLD_PID%" 2>nul | find "%OLD_PID%" >nul
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto wait_loop
+)
+
+timeout /t 1 /nobreak >nul
+copy /y "%NEW_EXE%" "%CURRENT_EXE%" >nul
+if errorlevel 1 (
+    copy /y "%NEW_EXE%" "%CURRENT_EXE%" >nul
+)
+
+del "%NEW_EXE%" >nul 2>&1
+start "" "%CURRENT_EXE%"
+
+del "%~f0" >nul 2>&1
+exit
+`;
+          fs.writeFileSync(scriptPath, batContent.trim(), 'utf-8');
+
+          const helper = spawn('cmd.exe', ['/c', scriptPath], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true
+          });
+          helper.unref();
+        }
       } else {
-        await shell.openPath(targetPath);
+        await shell.openPath(targetDownloadedPath);
       }
 
+      // Exit immediately so old process releases the file lock
       setTimeout(() => {
-        app.quit();
-      }, 1000);
+        app.exit(0);
+      }, 500);
     } catch (err: any) {
       this.isDownloading = false;
       console.error(`[AppUpdater] Error aplicando actualización: ${err.message}`);
@@ -136,7 +209,7 @@ export class AppUpdater {
   }
 
   /**
-   * Multi-segment parallel stream downloader for software update binaries
+   * 16-Segment Turbo Parallel Downloader with HTTP Range
    */
   private async downloadMultiSegmentFile(
     url: string,
@@ -155,7 +228,7 @@ export class AppUpdater {
       totalBytes = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
     } catch {}
 
-    const segmentsCount = totalBytes > 10 * 1024 * 1024 ? 8 : 4;
+    const segmentsCount = 16;
     const chunkSize = Math.ceil(totalBytes / segmentsCount);
 
     if (totalBytes <= 0 || chunkSize <= 0) {
@@ -198,7 +271,7 @@ export class AppUpdater {
               return reject(new Error(`Segment error: HTTP ${res.statusCode}`));
             }
 
-            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 2 * 1024 * 1024 });
+            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 4 * 1024 * 1024 });
 
             res.on('data', (chunk) => {
               chunkProgress[index] += chunk.length;
@@ -239,7 +312,6 @@ export class AppUpdater {
         fs.rmdirSync(tempDir);
       } catch {}
     } catch {
-      // Fallback to single stream if parallel ranges fail
       return this.downloadSingleStream(finalUrl, dest, onProgress);
     }
   }
@@ -282,7 +354,7 @@ export class AppUpdater {
           const rawLen = res.headers['content-length'];
           const total = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
           let loaded = 0;
-          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
 
           res.on('data', (chunk) => {
             loaded += chunk.length;

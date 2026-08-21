@@ -10,19 +10,23 @@ import { configStore } from './config-store';
 const require = createRequire(import.meta.url);
 const AdmZip = require('adm-zip');
 
-// High-performance HTTP/HTTPS Agents with Keep-Alive and Connection Pooling
+// Ultra-fast HTTP/HTTPS Agents with Keep-Alive, TCP noDelay, IPv4 forced and 256 connection pooling
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 128,
-  maxFreeSockets: 64,
-  timeout: 60000
+  maxSockets: 256,
+  maxFreeSockets: 128,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 128,
-  maxFreeSockets: 64,
-  timeout: 60000
+  maxSockets: 256,
+  maxFreeSockets: 128,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 export interface ModpackFile {
@@ -53,7 +57,7 @@ export interface SyncProgress {
 }
 
 export class ModSynchronizer {
-  private concurrency = 32; // 32 simultaneous parallel download streams
+  private concurrency = 64; // 64 simultaneous parallel download streams
 
   private getInstanceDir(): string {
     return configStore.getInstanceDir();
@@ -167,7 +171,7 @@ export class ModSynchronizer {
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: '⚡ Conectando al acelerador multi-segmento (8 hilos paralelos)...',
+          task: '⚡ Conectando al acelerador multi-segmento (16 hilos paralelos)...',
           total: 100,
           current: 0,
           percent: 0
@@ -208,7 +212,7 @@ export class ModSynchronizer {
       return { synced: manifest.files?.length || 1, deleted: 0, total: manifest.files?.length || 1 };
     }
 
-    // 2. ULTRA-FAST 32-THREAD PARALLEL INCREMENTAL SYNC
+    // 2. ULTRA-FAST 64-THREAD PARALLEL INCREMENTAL SYNC
     if (!manifest.files || !Array.isArray(manifest.files)) {
       return { synced: 0, deleted: 0, total: 0 };
     }
@@ -313,8 +317,7 @@ export class ModSynchronizer {
   }
 
   /**
-   * Multi-segment parallel downloader: splits large file into chunks (Range: bytes)
-   * downloading simultaneously over multiple Keep-Alive TCP streams to saturate bandwidth.
+   * 16-Segment Turbo Parallel Downloader with HTTP Range & TCP low latency
    */
   private async downloadMultiSegmentFile(
     url: string,
@@ -349,7 +352,7 @@ export class ModSynchronizer {
       });
     }
 
-    const segmentsCount = Math.min(8, Math.max(4, Math.floor(totalBytes / (30 * 1024 * 1024))));
+    const segmentsCount = 16;
     const chunkSize = Math.ceil(totalBytes / segmentsCount);
     const tempDir = path.join(path.dirname(dest), 'temp_chunks');
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
@@ -369,7 +372,7 @@ export class ModSynchronizer {
 
       onProgress({
         stage: 'mods',
-        task: `⚡ Descarga Acelerada (${segmentsCount} hilos): ${(loaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB — ${speedMBs.toFixed(1)} MB/s (${remainingSec}s restantes)`,
+        task: `⚡ Descarga Turbo (${segmentsCount} hilos): ${(loaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB — ${speedMBs.toFixed(1)} MB/s (${remainingSec}s restantes)`,
         total: totalBytes,
         current: loaded,
         percent
@@ -401,7 +404,7 @@ export class ModSynchronizer {
               return reject(new Error(`Error descargando segmento ${index}: HTTP ${res.statusCode}`));
             }
 
-            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 2 * 1024 * 1024 });
+            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 4 * 1024 * 1024 });
 
             res.on('data', (chunk) => {
               chunkProgress[index] += chunk.length;
@@ -486,7 +489,7 @@ export class ModSynchronizer {
             return reject(new Error(`Error descargando ${url}: HTTP ${res.statusCode}`));
           }
 
-          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
           res.pipe(file);
 
           file.on('finish', () => {
@@ -527,7 +530,7 @@ export class ModSynchronizer {
 
           const total = parseInt(res.headers['content-length'] || '0', 10);
           let loaded = 0;
-          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
 
           res.on('data', (chunk) => {
             loaded += chunk.length;

@@ -14,16 +14,20 @@ const { Client, Authenticator } = require('minecraft-launcher-core');
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
-  timeout: 60000
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
-  timeout: 60000
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 export interface LaunchOptions {
@@ -231,7 +235,7 @@ export class MinecraftLauncher {
           const rawLen = res.headers['content-length'];
           const total = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
           let loaded = 0;
-          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
 
           res.on('data', (chunk) => {
             loaded += chunk.length;

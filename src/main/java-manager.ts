@@ -11,16 +11,20 @@ const AdmZip = require('adm-zip');
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
-  timeout: 60000
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
-  timeout: 60000
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  timeout: 60000,
+  family: 4,
+  noDelay: true
 });
 
 export interface DownloadProgress {
@@ -81,7 +85,7 @@ export class JavaManager {
     if (onProgress) {
       onProgress({
         stage: 'java',
-        task: `⚡ Conectando al acelerador de descarga de Java ${version} OpenJDK...`,
+        task: `⚡ Conectando al acelerador de descarga de Java ${version} OpenJDK (16 hilos)...`,
         total: 100,
         current: 0,
         percent: 0
@@ -154,7 +158,7 @@ export class JavaManager {
       totalBytes = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
     } catch {}
 
-    const segmentsCount = 8;
+    const segmentsCount = 16;
     const chunkSize = Math.ceil(totalBytes / segmentsCount);
 
     if (totalBytes <= 0 || chunkSize <= 0) {
@@ -197,7 +201,7 @@ export class JavaManager {
               return reject(new Error(`Segment error: HTTP ${res.statusCode}`));
             }
 
-            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 2 * 1024 * 1024 });
+            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 4 * 1024 * 1024 });
 
             res.on('data', (chunk) => {
               chunkProgress[index] += chunk.length;
@@ -280,7 +284,7 @@ export class JavaManager {
           const rawLen = res.headers['content-length'];
           const total = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
           let loaded = 0;
-          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
 
           res.on('data', (chunk) => {
             loaded += chunk.length;
