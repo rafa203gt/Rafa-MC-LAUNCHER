@@ -36,7 +36,6 @@ function scanDirectory(baseDir, subDir = '') {
     if (entry.isDirectory()) {
       results.push(...scanDirectory(baseDir, relPath));
     } else if (entry.isFile()) {
-      // Ignore temporary or cache files
       if (entry.name.endsWith('.tmp') || entry.name === '.DS_Store') continue;
 
       const stats = fs.statSync(fullPath);
@@ -57,9 +56,9 @@ function scanDirectory(baseDir, subDir = '') {
 }
 
 async function main() {
-  console.log('==============================================');
-  console.log('🚀 PUBLICADOR AUTOMÁTICO DE MODPACK (ATM10)  ');
-  console.log('==============================================\n');
+  console.log('========================================================');
+  console.log('🚀 SINCRONIZACIÓN EXACTA 1:1 DE ALL THE MODS 10 (ATM10) ');
+  console.log('========================================================\n');
 
   if (!fs.existsSync(INSTANCE_DIR)) {
     console.error(`❌ No se encontró la carpeta de la instancia: ${INSTANCE_DIR}`);
@@ -70,15 +69,49 @@ async function main() {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
 
-  const foldersToScan = ['mods', 'config', 'defaultconfigs', 'kubejs', 'shaderpacks', 'datapacks'];
-  const allFiles = [];
+  const itemsToInclude = [
+    'config',
+    'datapacks',
+    'defaultconfigs',
+    'kubejs',
+    'local',
+    'mods',
+    'resourcepacks',
+    'saves',
+    'shaderpacks',
+    'manifest.json',
+    'minecraftinstance.json'
+  ];
 
-  for (const folder of foldersToScan) {
-    const folderPath = path.join(INSTANCE_DIR, folder);
-    if (fs.existsSync(folderPath)) {
-      console.log(`📁 Escaneando ${folder}...`);
-      const files = scanDirectory(INSTANCE_DIR, folder);
-      allFiles.push(...files);
+  const allFiles = [];
+  const zip = new AdmZip();
+
+  for (const item of itemsToInclude) {
+    const fullPath = path.join(INSTANCE_DIR, item);
+    if (!fs.existsSync(fullPath)) {
+      if (['resourcepacks', 'saves', 'datapacks'].includes(item)) {
+        fs.mkdirSync(fullPath, { recursive: true });
+      }
+    }
+
+    if (fs.existsSync(fullPath)) {
+      const stats = fs.statSync(fullPath);
+      if (stats.isDirectory()) {
+        console.log(`📁 Incluyendo carpeta: ${item}/`);
+        const files = scanDirectory(INSTANCE_DIR, item);
+        allFiles.push(...files);
+        zip.addLocalFolder(fullPath, item);
+      } else if (stats.isFile()) {
+        console.log(`📄 Incluyendo archivo: ${item}`);
+        const sha1 = calculateSha1(fullPath);
+        allFiles.push({
+          path: item,
+          sha1: sha1,
+          size: stats.size,
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG_VERSION}/${encodeURIComponent(item)}`
+        });
+        zip.addLocalFile(fullPath);
+      }
     }
   }
 
@@ -96,30 +129,13 @@ async function main() {
   };
 
   fs.writeFileSync(OUTPUT_MANIFEST, JSON.stringify(manifest, null, 2), 'utf-8');
-  console.log(`\n✅ Manifiesto generado en: ${OUTPUT_MANIFEST}`);
-  console.log(`📊 Total de archivos en el modpack: ${allFiles.length}`);
+  console.log(`\n✅ Manifiesto 1:1 generado en: ${OUTPUT_MANIFEST}`);
+  console.log(`📊 Total de archivos catalogados: ${allFiles.length}`);
 
-  console.log('\n📦 Comprimiendo paquete completo (atm10-bundle.zip)...');
-  const zip = new AdmZip();
-  for (const folder of foldersToScan) {
-    const full = path.join(INSTANCE_DIR, folder);
-    if (fs.existsSync(full)) {
-      zip.addLocalFolder(full, folder);
-    }
-  }
-
+  console.log('\n📦 Generando paquete comprimido 1:1 (atm10-bundle.zip)...');
   zip.writeZip(OUTPUT_ZIP);
   const zipStats = fs.statSync(OUTPUT_ZIP);
   console.log(`✅ Archivo zip generado: ${OUTPUT_ZIP} (${(zipStats.size / 1024 / 1024).toFixed(1)} MB)`);
-
-  console.log('\n==============================================');
-  console.log('📌 INSTRUCCIONES PARA PUBLICAR LA ACTUALIZACIÓN');
-  console.log('==============================================');
-  console.log(`1. Ve a tu repositorio de GitHub: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/new`);
-  console.log(`2. Crea una nueva Release con Tag: ${TAG_VERSION}`);
-  console.log(`3. Adjunta el archivo: modpack/atm10-bundle.zip`);
-  console.log(`4. Haz 'git commit' y 'git push' del archivo modpack/manifest.json`);
-  console.log(`\n🎉 ¡Cualquier usuario que abra el launcher recibirá todos los mods automáticamente!`);
 }
 
 main().catch(console.error);
