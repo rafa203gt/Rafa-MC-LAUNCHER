@@ -23,9 +23,9 @@ export class JavaManager {
     this.runtimeDir = configStore.getRuntimeDir();
   }
 
-  public getJavaExecutablePath(): string | null {
-    const java17Dir = path.join(this.runtimeDir, 'java17');
-    if (!fs.existsSync(java17Dir)) return null;
+  public getJavaExecutablePath(version: number = 21): string | null {
+    const javaDir = path.join(this.runtimeDir, `java${version}`);
+    if (!fs.existsSync(javaDir)) return null;
 
     const findJava = (dir: string): string | null => {
       const files = fs.readdirSync(dir);
@@ -42,16 +42,19 @@ export class JavaManager {
       return null;
     };
 
-    return findJava(java17Dir);
+    return findJava(javaDir);
   }
 
-  public async ensureJava(onProgress?: (p: DownloadProgress) => void): Promise<string> {
-    const existing = this.getJavaExecutablePath();
+  public async ensureJava(
+    version: number = 21,
+    onProgress?: (p: DownloadProgress) => void
+  ): Promise<string> {
+    const existing = this.getJavaExecutablePath(version);
     if (existing) {
       if (onProgress) {
         onProgress({
           stage: 'java',
-          task: 'Java 17 verificado',
+          task: `Java ${version} verificado`,
           total: 100,
           current: 100,
           percent: 100
@@ -63,27 +66,27 @@ export class JavaManager {
     if (onProgress) {
       onProgress({
         stage: 'java',
-        task: 'Descargando Java 17 OpenJDK (Adoptium)...',
+        task: `Descargando Java ${version} OpenJDK (Adoptium)...`,
         total: 100,
         current: 0,
         percent: 0
       });
     }
 
-    const java17Dir = path.join(this.runtimeDir, 'java17');
-    if (!fs.existsSync(java17Dir)) {
-      fs.mkdirSync(java17Dir, { recursive: true });
+    const javaDir = path.join(this.runtimeDir, `java${version}`);
+    if (!fs.existsSync(javaDir)) {
+      fs.mkdirSync(javaDir, { recursive: true });
     }
 
-    const zipPath = path.join(this.runtimeDir, 'temurin17.zip');
-    const downloadUrl = 'https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse';
+    const zipPath = path.join(this.runtimeDir, `temurin${version}.zip`);
+    const downloadUrl = `https://api.adoptium.net/v3/binary/latest/${version}/ga/windows/x64/jdk/hotspot/normal/eclipse`;
 
     await this.downloadWithRedirects(downloadUrl, zipPath, (loaded, total) => {
       if (onProgress && total > 0) {
         const percent = Math.min(100, Math.round((loaded / total) * 100));
         onProgress({
           stage: 'java',
-          task: `Descargando Java 17 (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB)...`,
+          task: `Descargando Java ${version} (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB)...`,
           total,
           current: loaded,
           percent
@@ -94,7 +97,7 @@ export class JavaManager {
     if (onProgress) {
       onProgress({
         stage: 'java',
-        task: 'Extrayendo Java 17...',
+        task: `Extrayendo Java ${version}...`,
         total: 100,
         current: 100,
         percent: 100
@@ -102,17 +105,17 @@ export class JavaManager {
     }
 
     const zip = new AdmZip(zipPath);
-    zip.extractAllTo(java17Dir, true);
+    zip.extractAllTo(javaDir, true);
 
     try {
       fs.unlinkSync(zipPath);
     } catch {
-      // Ignore cleanup error
+      // Cleanup
     }
 
-    const javaPath = this.getJavaExecutablePath();
+    const javaPath = this.getJavaExecutablePath(version);
     if (!javaPath) {
-      throw new Error('No se pudo encontrar javaw.exe tras la extracción de Java 17.');
+      throw new Error(`No se pudo encontrar javaw.exe tras la extracción de Java ${version}.`);
     }
 
     return javaPath;
@@ -130,36 +133,38 @@ export class JavaManager {
         }
 
         const client = currentUrl.startsWith('https') ? https : http;
-        client.get(currentUrl, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            return makeRequest(res.headers.location, depth + 1);
-          }
+        client
+          .get(currentUrl, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+              return makeRequest(res.headers.location, depth + 1);
+            }
 
-          if (res.statusCode !== 200) {
-            return reject(new Error(`Fallo en la descarga de Java. Código de estado: ${res.statusCode}`));
-          }
+            if (res.statusCode !== 200) {
+              return reject(new Error(`Fallo en la descarga de Java. Código de estado: ${res.statusCode}`));
+            }
 
-          const total = parseInt(res.headers['content-length'] || '0', 10);
-          let loaded = 0;
-          const file = fs.createWriteStream(dest);
+            const total = parseInt(res.headers['content-length'] || '0', 10);
+            let loaded = 0;
+            const file = fs.createWriteStream(dest);
 
-          res.on('data', (chunk) => {
-            loaded += chunk.length;
-            onProgress(loaded, total);
+            res.on('data', (chunk) => {
+              loaded += chunk.length;
+              onProgress(loaded, total);
+            });
+
+            res.pipe(file);
+
+            file.on('finish', () => {
+              file.close(() => resolve());
+            });
+
+            file.on('error', (err) => {
+              fs.unlink(dest, () => reject(err));
+            });
+          })
+          .on('error', (err) => {
+            reject(err);
           });
-
-          res.pipe(file);
-
-          file.on('finish', () => {
-            file.close(() => resolve());
-          });
-
-          file.on('error', (err) => {
-            fs.unlink(dest, () => reject(err));
-          });
-        }).on('error', (err) => {
-          reject(err);
-        });
       };
 
       makeRequest(url);

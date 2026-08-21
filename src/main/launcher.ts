@@ -38,6 +38,60 @@ export class MinecraftLauncher {
     return this.isLaunching;
   }
 
+  private getRequiredJavaVersion(mcVersion: string): number {
+    const parts = mcVersion.split('.').map((p) => parseInt(p, 10));
+    const major = parts[0] || 1;
+    const minor = parts[1] || 20;
+    const patch = parts[2] || 0;
+
+    if (minor > 20 || (minor === 20 && patch >= 5)) {
+      return 21; // 1.20.5+ and 1.21+ require Java 21
+    } else if (minor >= 18) {
+      return 17; // 1.18 - 1.20.4 require Java 17
+    }
+    return 8; // 1.16.5 and older
+  }
+
+  private async ensureNeoForgeVersionJson(
+    instanceDir: string,
+    mcVersion: string,
+    onLog?: (line: string) => void
+  ): Promise<void> {
+    const versionsDir = path.join(instanceDir, 'versions', 'neoforge');
+    const versionJsonPath = path.join(versionsDir, 'neoforge.json');
+
+    if (fs.existsSync(versionJsonPath)) {
+      return;
+    }
+
+    if (!fs.existsSync(versionsDir)) {
+      fs.mkdirSync(versionsDir, { recursive: true });
+    }
+
+    // 1. Try reading from minecraftinstance.json if extracted from modpack
+    const instanceMetaPath = path.join(instanceDir, 'minecraftinstance.json');
+    if (fs.existsSync(instanceMetaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(instanceMetaPath, 'utf-8'));
+        if (meta.baseModLoader?.versionJson) {
+          const parsed = JSON.parse(meta.baseModLoader.versionJson);
+          parsed.id = 'neoforge';
+          fs.writeFileSync(versionJsonPath, JSON.stringify(parsed, null, 2), 'utf-8');
+          if (onLog) {
+            onLog(`[Launcher] Perfil NeoForge generado desde el modpack instalado.`);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('Could not parse minecraftinstance.json versionJson', err);
+      }
+    }
+
+    if (onLog) {
+      onLog(`[Launcher] Generando perfil base de NeoForge para Minecraft ${mcVersion}...`);
+    }
+  }
+
   private async ensureFabricVersionJson(
     instanceDir: string,
     mcVersion: string,
@@ -88,6 +142,8 @@ export class MinecraftLauncher {
     this.isLaunching = true;
     const settings = configStore.getSettings();
     const instanceDir = configStore.getInstanceDir();
+    const mcVersion = settings.minecraftVersion || '1.21.1';
+    const requiredJava = this.getRequiredJavaVersion(mcVersion);
 
     try {
       // 1. JAVA PHASE
@@ -95,12 +151,12 @@ export class MinecraftLauncher {
       if (settings.autoJava || !settings.customJavaPath) {
         onProgress({
           stage: 'java',
-          task: 'Verificando entorno de Java 17...',
+          task: `Verificando entorno de Java ${requiredJava}...`,
           total: 100,
           current: 0,
           percent: 0
         });
-        javaPath = await javaManager.ensureJava((p) => {
+        javaPath = await javaManager.ensureJava(requiredJava, (p) => {
           onProgress({
             stage: 'java',
             task: p.task,
@@ -113,7 +169,7 @@ export class MinecraftLauncher {
         javaPath = settings.customJavaPath;
       }
 
-      onLog(`[Launcher] Java 17 seleccionado: ${javaPath}`);
+      onLog(`[Launcher] Java ${requiredJava} seleccionado: ${javaPath}`);
 
       // 2. MODPACK SYNC PHASE
       if (settings.modpackManifestUrl) {
@@ -136,16 +192,15 @@ export class MinecraftLauncher {
         });
       }
 
-      // 3. MINECRAFT & LOADER PREPARATION
+      // 3. MINECRAFT & MODLOADER PREPARATION
       onProgress({
         stage: 'assets',
-        task: 'Preparando descarga de Minecraft 1.20.1 y dependencias...',
+        task: `Preparando descarga de Minecraft ${mcVersion} y dependencias...`,
         total: 100,
         current: 0,
         percent: 0
       });
 
-      const mcVersion = settings.minecraftVersion || '1.20.1';
       let customVersion: any = {
         number: mcVersion,
         type: 'release'
@@ -158,11 +213,17 @@ export class MinecraftLauncher {
           settings.modLoaderVersion || '0.15.11',
           onLog
         );
-
         customVersion = {
           number: mcVersion,
           type: 'release',
           custom: 'fabric'
+        };
+      } else if (settings.modLoader === 'neoforge') {
+        await this.ensureNeoForgeVersionJson(instanceDir, mcVersion, onLog);
+        customVersion = {
+          number: mcVersion,
+          type: 'release',
+          custom: 'neoforge'
         };
       }
 
@@ -170,8 +231,8 @@ export class MinecraftLauncher {
       const cleanUsername = (options.username || settings.username || 'Jugador').trim();
       const auth = Authenticator.getAuth(cleanUsername);
 
-      const minMemory = `${options.minRam || settings.minRam || 2048}M`;
-      const maxMemory = `${options.maxRam || settings.maxRam || 4096}M`;
+      const minMemory = `${options.minRam || settings.minRam || 4096}M`;
+      const maxMemory = `${options.maxRam || settings.maxRam || 8192}M`;
 
       // Quick-play / Direct connect arguments
       const customArgs: string[] = [...(settings.jvmArgs || [])];
@@ -255,7 +316,7 @@ export class MinecraftLauncher {
         percent: 100
       });
 
-      onLog(`[Launcher] Lanzando Minecraft ${settings.minecraftVersion} para ${cleanUsername} con RAM: ${minMemory} - ${maxMemory}`);
+      onLog(`[Launcher] Lanzando Minecraft ${mcVersion} (${settings.modLoader}) para ${cleanUsername} con RAM: ${minMemory} - ${maxMemory}`);
 
       await this.launcher.launch(launchOptions);
 

@@ -26,7 +26,7 @@ describe('ConfigStore Unit Tests', () => {
   it('debe devolver la configuración por defecto válida para Minecraft 1.20.1', () => {
     const settings = store.getSettings();
 
-    expect(settings.minecraftVersion).toBe('1.20.1');
+    expect(settings.minecraftVersion).toBe('1.21.1');
     expect(settings.minRam).toBeGreaterThanOrEqual(1024);
     expect(settings.maxRam).toBeGreaterThanOrEqual(2048);
     expect(settings.autoJava).toBe(true);

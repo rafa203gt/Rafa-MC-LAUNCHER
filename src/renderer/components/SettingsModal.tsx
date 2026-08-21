@@ -94,14 +94,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onSave }
             />
 
             <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-              <span>2 GB</span>
-              <span className="text-emerald-400 font-bold">4 GB (Recomendado)</span>
-              <span>8 GB</span>
+              <span>4 GB</span>
+              <span>6 GB</span>
+              <span className="text-emerald-400 font-bold">8 GB (Recomendado ATM10)</span>
               <span>16 GB</span>
             </div>
 
             <p className="text-[11px] text-slate-400">
-              Para Minecraft 1.20.1 con mods, 4 GB a 6 GB es la configuración ideal.
+              Para modpacks grandes como All the Mods 10 (1.21.1), se recomienda asignar de 6 GB a 8 GB de RAM.
             </p>
           </div>
         </div>

@@ -1,24 +1,36 @@
 {
-  "serverName": "Rafa Server",
+  "serverName": "All the Mods 10 (ATM10)",
   "serverIp": "play.tuserver.com",
   "serverPort": 25565,
   "autoConnect": true,
-  "minecraftVersion": "1.20.1",
-  "modLoader": "fabric",
-  "modLoaderVersion": "0.15.11",
-  "modpackManifestUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json",
+  "minecraftVersion": "1.21.1",
+  "modLoader": "neoforge",
+  "modLoaderVersion": "21.1.247",
+  "modpackManifestUrl": "",
   "newsFeedUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/news.json",
   "java": {
     "autoDownload": true,
-    "requiredVersion": 17,
+    "requiredVersion": 21,
     "customPath": ""
   },
   "client": {
-    "minRam": 2048,
-    "maxRam": 4096,
+    "minRam": 4096,
+    "maxRam": 8192,
     "fullscreen": false,
     "width": 1280,
     "height": 720,
-    "jvmArgs": ["-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", "-XX:MaxGCPauseMillis=200", "-XX:+UnlockExperimentalVMOptions", "-XX:+DisableExplicitGC", "-XX:+AlwaysPreTouch"]
+    "jvmArgs": [
+      "-XX:+UseG1GC",
+      "-XX:+ParallelRefProcEnabled",
+      "-XX:MaxGCPauseMillis=200",
+      "-XX:+UnlockExperimentalVMOptions",
+      "-XX:+DisableExplicitGC",
+      "-XX:+AlwaysPreTouch",
+      "-XX:G1NewSizePercent=30",
+      "-XX:G1MaxNewSizePercent=40",
+      "-XX:G1ReservePercent=20",
+      "-XX:G1HeapWastePercent=5",
+      "-XX:G1MixedGCCountTarget=4"
+    ]
   }
 }

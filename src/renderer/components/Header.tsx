@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusT
         </div>
         <div>
           <h1 className="font-bold text-sm tracking-wider text-slate-100 uppercase">Rafa Launcher</h1>
-          <span className="text-[10px] text-emerald-400 font-medium tracking-tight">v1.20.1 Fabric / Forge</span>
+          <span className="text-[10px] text-emerald-400 font-medium tracking-tight">v1.21.1 NeoForge • ATM10</span>
         </div>
       </div>
 
