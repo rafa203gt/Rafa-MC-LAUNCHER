@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 
 const REPO_OWNER = 'rafa203gt';
 const REPO_NAME = 'Rafa-MC-LAUNCHER';
@@ -87,6 +87,15 @@ async function runCmd(cmd, args) {
   });
 }
 
+function getRecentChanges() {
+  try {
+    const rawCommits = execSync('git log -n 5 --pretty=format:"- %s (%h)"', { encoding: 'utf8' });
+    return rawCommits.trim();
+  } catch {
+    return '- Mejoras y optimizaciones generales del launcher.';
+  }
+}
+
 async function main() {
   console.log('========================================================');
   console.log('🚀 PUBLICADOR DE NUEVA VERSIÓN DEL LAUNCHER (APP RELEASE)');
@@ -97,7 +106,7 @@ async function main() {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
   const currentVersion = pkg.version;
 
-  // Calcular nueva versión minor (ej: 1.0.0 -> 1.0.1)
+  // Calcular nueva versión (ej: 1.0.13 -> 1.0.14)
   const parts = currentVersion.split('.').map(Number);
   parts[2] = (parts[2] || 0) + 1;
   const newVersion = parts.join('.');
@@ -139,9 +148,30 @@ async function main() {
     process.exit(1);
   }
 
-  // 4. Crear Release en GitHub
+  // 4. Crear Release en GitHub con descripción detallada
   const tag = `v${newVersion}`;
   console.log(`\n🚀 Creando GitHub Release ${tag}...`);
+
+  const recentCommits = getRecentChanges();
+
+  const releaseDescription = `## 🚀 Rafa MC Launcher ${tag}
+
+### ✨ Novedades y Mejoras en esta Versión:
+- 🛠️ **Actualizador del Instalador de Windows (Setup.exe):** Soporte de elevación de permisos UAC mediante \`ShellExecuteExW\` y liberación forzada de procesos antiguos para una instalación limpia e interactiva.
+- ⚡ **Descarga Ultra-Rápida de Actualizaciones:** Motor de streaming directo con Axios y buffer de 8 MB con medidor de velocidad (\`MB/s\`) y tamaño transferido en vivo.
+- 🎮 **Hero Launch Station & Selector Rápido:** Cambio de instancias de juego (ATM 10, Vanilla, etc.) directamente desde la pantalla principal sin salir de la pestaña.
+- 🧰 **Hub de Herramientas Rápidas (Quick Tools):** Acceso directo en 1 clic a capturas de pantalla (\`screenshots\`), mundos (\`saves\`), mods, registros y reparación.
+- ⛏️ **Instancias Vanilla Multi-Versión:** Descarga automatizada oficial desde Mojang para cualquier versión (1.21.4, 1.20.1, 1.16.5, etc.).
+- 🛡️ **Limpieza Total de Copyright & Avisos Legales:** Uso exclusivo de iconografía vectorial propia y cláusula oficial de Mojang Studios / Microsoft.
+
+### 📝 Registro de Cambios Recientes:
+${recentCommits}
+
+---
+### 📦 Archivos Disponibles para Descarga:
+1. 🎮 **Ejecutable Portable (Recomendado):** \`${portableName}\` (No requiere instalación, actualizable en 1 clic)
+2. 📦 **Instalador de Windows:** \`${installerName}\` (Crea accesos directos en el menú inicio y escritorio)
+`;
 
   const createRes = await githubRequest(
     {
@@ -158,7 +188,7 @@ async function main() {
     JSON.stringify({
       tag_name: tag,
       name: `Rafa MC Launcher ${tag}`,
-      body: `### 🚀 Rafa MC Launcher ${tag} - Actualización Oficial\n\n- ⚡ **Acelerador de Descarga Multi-Segmento:** Descarga de modpacks en 8 a 16 hilos simultáneos saturando el ancho de banda.\n- 🔄 **Botón de Reinstalación / Reparación:** Reparación en 1 clic que limpia mods corruptos preservando partidas.\n- 🗂️ **Gestor Multi-Instancia:** Selector de modpacks con perfiles aislados (All The Mods 10, Vanilla, Custom).\n- 📲 **Auto-Actualizador de Software:** Detección de versiones y actualización desatendida.\n- 🛠️ **NeoForge 21.1.247 & Java 21:** Soporte nativo para 479 mods de ATM 10.`,
+      body: releaseDescription,
       draft: false,
       prerelease: false
     })
@@ -170,7 +200,7 @@ async function main() {
   }
 
   const uploadUrl = createRes.data.upload_url;
-  console.log(`✅ Release creada. Subiendo instaladores...`);
+  console.log(`✅ Release creada con descripción detallada. Subiendo instaladores...`);
 
   for (const file of filesToUpload) {
     console.log(`⬆️ Subiendo ${file.name}...`);
