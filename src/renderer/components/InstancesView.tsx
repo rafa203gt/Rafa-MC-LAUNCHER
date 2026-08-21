@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu } from 'lucide-react';
 import { MinecraftInstance } from '../types';
 import { CreateInstanceModal } from './CreateInstanceModal';
+import atm10Logo from '../assets/atm10.png';
 
 interface InstancesViewProps {
   onInstanceActivated: (instance: MinecraftInstance) => void;
@@ -130,11 +131,23 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
                 }`}
               >
                 {/* Banner / Header Image */}
-                <div className="h-28 relative bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center overflow-hidden border-b border-mc-border/50">
-                  {inst.bannerUrl ? (
+                <div className="h-32 relative bg-gradient-to-r from-emerald-950/70 via-slate-900 to-teal-950/70 flex items-center justify-center overflow-hidden border-b border-mc-border/50">
+                  {inst.id === 'atm10' ? (
+                    <div className="relative w-full h-full flex items-center justify-center p-3">
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent" />
+                      <img
+                        src={atm10Logo}
+                        alt="All The Mods 10"
+                        className="h-20 w-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)] group-hover:scale-110 transition-transform duration-500"
+                      />
+                    </div>
+                  ) : inst.bannerUrl ? (
                     <img
                       src={inst.bannerUrl}
                       alt={inst.name}
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   ) : (
@@ -146,18 +159,18 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
 
                   {/* Active Badge */}
                   {isActive && (
-                    <div className="absolute top-3 right-3 bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1">
+                    <div className="absolute top-3 right-3 bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
                       <Check className="w-3 h-3 stroke-[3]" />
                       ACTIVO
                     </div>
                   )}
 
                   {/* Version Tag */}
-                  <div className="absolute bottom-2 left-3 flex items-center gap-1.5">
-                    <span className="bg-black/60 backdrop-blur-md text-emerald-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-500/20">
+                  <div className="absolute bottom-2 left-3 flex items-center gap-1.5 z-10">
+                    <span className="bg-black/70 backdrop-blur-md text-emerald-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-500/30">
                       MC {inst.minecraftVersion}
                     </span>
-                    <span className="bg-black/60 backdrop-blur-md text-cyan-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-md border border-cyan-500/20 uppercase">
+                    <span className="bg-black/70 backdrop-blur-md text-cyan-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded-md border border-cyan-500/30 uppercase">
                       {inst.modLoader}
                     </span>
                   </div>

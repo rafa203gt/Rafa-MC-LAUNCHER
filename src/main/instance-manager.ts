@@ -36,47 +36,16 @@ export class InstanceManager {
       {
         id: 'atm10',
         name: 'All the Mods 10 (ATM 10)',
-        description: 'Modpack insignia con más de 470 mods de magia, tecnología, misiones FTB y dimensiones.',
+        description: 'Modpack oficial con más de 470 mods de magia, tecnología, misiones FTB y dimensiones.',
         minecraftVersion: '1.21.1',
         modLoader: 'neoforge',
         modLoaderVersion: '21.1.247',
         modpackManifestUrl: 'https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json',
-        bannerUrl: 'https://media.forgecdn.net/attachments/description/1018698/description_0dc51a80-0a25-412e-836b-7ca4ee79dc07.png',
         icon: 'atom',
         author: 'ATM Team',
         totalMods: 479,
         isDefault: true,
         isActive: true,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'vanilla-1-21-1',
-        name: 'Minecraft Vanilla 1.21.1',
-        description: 'Experiencia pura y original de Minecraft 1.21.1 sin modificaciones para rendimiento máximo.',
-        minecraftVersion: '1.21.1',
-        modLoader: 'vanilla',
-        modLoaderVersion: '',
-        modpackManifestUrl: '',
-        icon: 'box',
-        author: 'Mojang Studios',
-        totalMods: 0,
-        isDefault: false,
-        isActive: false,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'fabric-light',
-        name: 'Fabric FPS Boost (1.21.1)',
-        description: 'Perfil ligero optimizado con Sodium, Lithium e Iris Shaders para jugar con el máximo rendimiento.',
-        minecraftVersion: '1.21.1',
-        modLoader: 'fabric',
-        modLoaderVersion: '0.16.9',
-        modpackManifestUrl: '',
-        icon: 'feather',
-        author: 'Comunidad',
-        totalMods: 15,
-        isDefault: false,
-        isActive: false,
         createdAt: new Date().toISOString()
       }
     ];
@@ -92,11 +61,15 @@ export class InstanceManager {
     } else {
       try {
         const raw = fs.readFileSync(this.instancesFile, 'utf-8');
-        const list: MinecraftInstance[] = JSON.parse(raw);
+        let list: MinecraftInstance[] = JSON.parse(raw);
         if (Array.isArray(list) && list.length > 0) {
+          // Filtrar perfiles automáticos no solicitados si existían previamente
+          list = list.filter((i) => i.id === 'atm10' || (!i.isDefault && i.id !== 'vanilla-1-21-1' && i.id !== 'fabric-light'));
+          if (list.length === 0) list = defaultInstances;
           this.cachedInstances = list;
           const active = list.find((i) => i.isActive);
-          this.activeInstanceId = active ? active.id : list[0].id;
+          this.activeInstanceId = active ? active.id : 'atm10';
+          this.save();
         } else {
           this.cachedInstances = defaultInstances;
         }
