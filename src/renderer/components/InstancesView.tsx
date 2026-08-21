@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu } from 'lucide-react';
+import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu, Box } from 'lucide-react';
 import { MinecraftInstance } from '../types';
 import { CreateInstanceModal } from './CreateInstanceModal';
 import atm10Logo from '../assets/atm10.png';
@@ -140,6 +140,15 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
                         alt="All The Mods 10"
                         className="h-20 w-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)] group-hover:scale-110 transition-transform duration-500"
                       />
+                    </div>
+                  ) : inst.modLoader === 'vanilla' ? (
+                    <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-emerald-900/40 via-slate-900 to-amber-950/30 p-3">
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 group-hover:scale-110 group-hover:border-emerald-400/50 transition-all duration-300 shadow-lg">
+                        <Box className="w-8 h-8 stroke-[2.2]" />
+                      </div>
+                      <span className="text-[11px] font-bold text-emerald-300 font-mono tracking-wider mt-1.5 uppercase">
+                        Minecraft Vanilla
+                      </span>
                     </div>
                   ) : inst.bannerUrl ? (
                     <img

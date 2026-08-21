@@ -459,25 +459,28 @@ export class MinecraftLauncher {
         '-XX:MaxTenuringThreshold=1'
       ];
 
-      // Flags obligatorios de acceso a módulos de Java 17/21 para NeoForge, Forge y Fabric
-      const javaModuleArgs = [
-        ...neoForgeJvmArgs,
-        ...performanceGcArgs,
-        '--add-opens=java.base/java.lang.invoke=cpw.mods.securejarhandler,ALL-UNNAMED',
-        '--add-opens=java.base/java.util.jar=cpw.mods.securejarhandler,ALL-UNNAMED',
-        '--add-opens=java.base/java.lang=ALL-UNNAMED',
-        '--add-opens=java.base/java.util=ALL-UNNAMED',
-        '--add-opens=java.base/java.nio.file=ALL-UNNAMED',
-        '--add-opens=java.base/sun.security.util=cpw.mods.securejarhandler,ALL-UNNAMED',
-        '--add-opens=java.base/sun.security.x509=ALL-UNNAMED',
-        '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
-        '--add-exports=java.base/sun.security.util=cpw.mods.securejarhandler,ALL-UNNAMED',
-        '--add-exports=jdk.naming.dns/com.sun.jndi.dns=java.naming'
-      ];
+      // Flags obligatorios de acceso a módulos de Java 17/21 solo para NeoForge, Forge y Fabric
+      const modLoaderModuleArgs =
+        settings.modLoader !== 'vanilla'
+          ? [
+              ...neoForgeJvmArgs,
+              '--add-opens=java.base/java.lang.invoke=cpw.mods.securejarhandler,ALL-UNNAMED',
+              '--add-opens=java.base/java.util.jar=cpw.mods.securejarhandler,ALL-UNNAMED',
+              '--add-opens=java.base/java.lang=ALL-UNNAMED',
+              '--add-opens=java.base/java.util=ALL-UNNAMED',
+              '--add-opens=java.base/java.nio.file=ALL-UNNAMED',
+              '--add-opens=java.base/sun.security.util=cpw.mods.securejarhandler,ALL-UNNAMED',
+              '--add-opens=java.base/sun.security.x509=ALL-UNNAMED',
+              '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+              '--add-exports=java.base/sun.security.util=cpw.mods.securejarhandler,ALL-UNNAMED',
+              '--add-exports=jdk.naming.dns/com.sun.jndi.dns=java.naming'
+            ]
+          : [];
 
       // JVM Arguments (solo flags para Java VM)
       const customArgs: string[] = [
-        ...javaModuleArgs,
+        ...performanceGcArgs,
+        ...modLoaderModuleArgs,
         ...(settings.jvmArgs || [])
       ];
 
