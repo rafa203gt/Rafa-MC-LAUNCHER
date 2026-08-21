@@ -10,6 +10,21 @@ import { configStore } from './config-store';
 const require = createRequire(import.meta.url);
 const AdmZip = require('adm-zip');
 
+// High-performance HTTP/HTTPS Agents with Keep-Alive and Connection Pooling
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 32,
+  timeout: 60000
+});
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 32,
+  timeout: 60000
+});
+
 export interface ModpackFile {
   path: string; // Relative to instance root (e.g. 'mods/mekanism.jar', 'config/forge.cfg')
   sha1: string;
@@ -24,7 +39,7 @@ export interface ModpackManifest {
   modLoader: 'fabric' | 'forge' | 'neoforge' | 'vanilla';
   modLoaderVersion: string;
   updatedAt?: string;
-  bundleUrl?: string; // Optional direct URL to full .zip package for fast 1-click initial install
+  bundleUrl?: string; // Direct URL to full .zip package for fast 1-click initial install
   bundleSha1?: string;
   files: ModpackFile[];
 }
@@ -39,6 +54,7 @@ export interface SyncProgress {
 
 export class ModSynchronizer {
   private instanceDir: string;
+  private concurrency = 16; // 16 parallel download streams
 
   constructor() {
     this.instanceDir = configStore.getInstanceDir();
@@ -103,12 +119,12 @@ export class ModSynchronizer {
 
     const localModFiles = fs.readdirSync(modsDir).filter((f) => f.endsWith('.jar'));
 
-    // 1. FAST BOOTSTRAP: If local instance is fresh/empty and manifest provides a bundleUrl (.zip)
+    // 1. FAST INITIAL BOOTSTRAP: If local instance is fresh (<10 mods) and bundleUrl (.zip) is provided
     if (localModFiles.length < 10 && manifest.bundleUrl) {
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: 'Descargando paquete completo del modpack...',
+          task: 'Iniciando descarga de alta velocidad del modpack completo...',
           total: 100,
           current: 0,
           percent: 0
@@ -116,12 +132,19 @@ export class ModSynchronizer {
       }
 
       const tempZip = path.join(this.instanceDir, 'temp_bundle.zip');
+      const startTime = Date.now();
+
       await this.downloadFileWithProgress(manifest.bundleUrl, tempZip, (loaded, total) => {
         if (onProgress && total > 0) {
           const percent = Math.min(100, Math.round((loaded / total) * 100));
+          const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
+          const speedMBs = loaded / 1024 / 1024 / elapsedSec;
+          const remainingBytes = Math.max(0, total - loaded);
+          const remainingSec = speedMBs > 0 ? Math.round(remainingBytes / 1024 / 1024 / speedMBs) : 0;
+
           onProgress({
             stage: 'mods',
-            task: `Descargando modpack completo (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB)...`,
+            task: `⚡ Descargando modpack (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB) - ${speedMBs.toFixed(1)} MB/s (${remainingSec}s restantes)`,
             total,
             current: loaded,
             percent
@@ -132,7 +155,7 @@ export class ModSynchronizer {
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: 'Extrayendo modpack y configuraciones...',
+          task: 'Extrayendo modpack de alta velocidad...',
           total: 100,
           current: 100,
           percent: 100
@@ -159,7 +182,7 @@ export class ModSynchronizer {
       return { synced: manifest.files?.length || 1, deleted: 0, total: manifest.files?.length || 1 };
     }
 
-    // 2. INCREMENTAL DIFFERENTIAL SYNC
+    // 2. ULTRA-FAST PARALLEL INCREMENTAL SYNC
     if (!manifest.files || !Array.isArray(manifest.files)) {
       return { synced: 0, deleted: 0, total: 0 };
     }
@@ -182,35 +205,47 @@ export class ModSynchronizer {
     let downloadedCount = 0;
     const totalToDownload = toDownload.length;
 
-    for (let i = 0; i < toDownload.length; i++) {
-      const file = toDownload[i];
-      const targetPath = path.join(this.instanceDir, file.path);
-      const parentDir = path.dirname(targetPath);
+    if (totalToDownload > 0) {
+      console.log(`[ModSync] Descargando ${totalToDownload} archivos en paralelo (${this.concurrency} hilos)...`);
 
-      if (!fs.existsSync(parentDir)) {
-        fs.mkdirSync(parentDir, { recursive: true });
-      }
+      // Worker pool for parallel downloads
+      let activeIndex = 0;
+      const downloadWorker = async () => {
+        while (activeIndex < toDownload.length) {
+          const index = activeIndex++;
+          const file = toDownload[index];
+          const targetPath = path.join(this.instanceDir, file.path);
+          const parentDir = path.dirname(targetPath);
 
-      if (onProgress) {
-        const percent = Math.round(((i + 1) / totalToDownload) * 100);
-        onProgress({
-          stage: 'mods',
-          task: `Actualizando archivos (${i + 1}/${totalToDownload}): ${path.basename(file.path)}`,
-          total: totalToDownload,
-          current: i + 1,
-          percent
-        });
-      }
+          if (!fs.existsSync(parentDir)) {
+            fs.mkdirSync(parentDir, { recursive: true });
+          }
 
-      try {
-        await this.downloadFile(file.downloadUrl, targetPath);
-        downloadedCount++;
-      } catch (err: any) {
-        console.warn(`[ModSync] Aviso: No se pudo descargar archivo individual ${file.path} (${err.message}). Continuando...`);
-      }
+          try {
+            await this.downloadFile(file.downloadUrl, targetPath);
+            downloadedCount++;
+          } catch (err: any) {
+            console.warn(`[ModSync] Aviso: No se pudo descargar ${file.path} (${err.message}).`);
+          }
+
+          if (onProgress) {
+            const percent = Math.round((downloadedCount / totalToDownload) * 100);
+            onProgress({
+              stage: 'mods',
+              task: `⚡ Actualizando (${downloadedCount}/${totalToDownload}): ${path.basename(file.path)}`,
+              total: totalToDownload,
+              current: downloadedCount,
+              percent
+            });
+          }
+        }
+      };
+
+      const workers = Array.from({ length: Math.min(this.concurrency, totalToDownload) }, () => downloadWorker());
+      await Promise.all(workers);
     }
 
-    // 3. CLEAN UP DEPRECATED MODS
+    // 3. CLEAN UP OBSOLETE MODS
     let deletedCount = 0;
     if (fs.existsSync(modsDir)) {
       const currentMods = fs.readdirSync(modsDir);
@@ -254,9 +289,12 @@ export class ModSynchronizer {
 
   private downloadFile(url: string, dest: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const client = url.startsWith('https') ? https : http;
+      const isHttps = url.startsWith('https');
+      const client = isHttps ? https : http;
+      const agent = isHttps ? httpsAgent : httpAgent;
+
       client
-        .get(url, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+        .get(url, { agent, headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             return this.downloadFile(res.headers.location, dest).then(resolve).catch(reject);
           }
@@ -265,7 +303,7 @@ export class ModSynchronizer {
             return reject(new Error(`Error descargando ${url}: HTTP ${res.statusCode}`));
           }
 
-          const file = fs.createWriteStream(dest);
+          const file = fs.createWriteStream(dest, { highWaterMark: 1024 * 1024 });
           res.pipe(file);
 
           file.on('finish', () => {
@@ -288,9 +326,12 @@ export class ModSynchronizer {
     onProgress: (loaded: number, total: number) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const client = url.startsWith('https') ? https : http;
+      const isHttps = url.startsWith('https');
+      const client = isHttps ? https : http;
+      const agent = isHttps ? httpsAgent : httpAgent;
+
       client
-        .get(url, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+        .get(url, { agent, headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             return this.downloadFileWithProgress(res.headers.location, dest, onProgress)
               .then(resolve)
@@ -303,7 +344,7 @@ export class ModSynchronizer {
 
           const total = parseInt(res.headers['content-length'] || '0', 10);
           let loaded = 0;
-          const file = fs.createWriteStream(dest);
+          const file = fs.createWriteStream(dest, { highWaterMark: 1024 * 1024 });
 
           res.on('data', (chunk) => {
             loaded += chunk.length;
