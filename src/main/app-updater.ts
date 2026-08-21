@@ -51,6 +51,17 @@ export interface UpdateDownloadProgress {
 export class AppUpdater {
   private isDownloading = false;
 
+  public isRunningPortable(): boolean {
+    if (process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR) {
+      return true;
+    }
+    const execLower = process.execPath.toLowerCase();
+    if (execLower.includes('\\temp\\') || execLower.includes('\\tmp\\')) {
+      return true;
+    }
+    return false;
+  }
+
   public getRealExecutablePath(): string {
     // In electron-builder portable builds, PORTABLE_EXECUTABLE_FILE points to the real .exe file
     if (process.env.PORTABLE_EXECUTABLE_FILE && fs.existsSync(process.env.PORTABLE_EXECUTABLE_FILE)) {
@@ -92,18 +103,17 @@ export class AppUpdater {
         return { hasUpdate: false, currentVersion, latestVersion: rawTag };
       }
 
-      const realExecPath = this.getRealExecutablePath().toLowerCase();
-      const isInstalledNsis = realExecPath.includes('appdata\\local\\programs');
+      const isPortable = this.isRunningPortable();
 
-      // If running installed version, prefer Setup installer. Otherwise prefer standalone Portable .exe
+      // If running portable, prefer portable exe. Otherwise prefer Setup installer
       let targetAsset: any = null;
-      if (isInstalledNsis) {
+      if (isPortable) {
         targetAsset = release.assets?.find(
-          (a: any) => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
+          (a: any) => a.name.endsWith('.exe') && !a.name.toLowerCase().includes('setup')
         );
       } else {
         targetAsset = release.assets?.find(
-          (a: any) => a.name.endsWith('.exe') && !a.name.toLowerCase().includes('setup')
+          (a: any) => a.name.endsWith('.exe') && a.name.toLowerCase().includes('setup')
         );
       }
 
@@ -159,28 +169,58 @@ export class AppUpdater {
       const realExecPath = this.getRealExecutablePath();
       const realExecDir = this.getRealExecutableDir();
       const pid = process.pid;
-      const isInstaller = fileName.toLowerCase().includes('setup');
+      const isInstaller = fileName.toLowerCase().includes('setup') || !this.isRunningPortable();
 
       console.log(`[AppUpdater] Actualización descargada con éxito.`);
+      console.log(`[AppUpdater] Tipo de ejecutable: ${isInstaller ? 'Instalador Setup' : 'Portable'}`);
       console.log(`[AppUpdater] Ruta ejecutable actual: ${realExecPath}`);
       console.log(`[AppUpdater] Directorio de destino: ${realExecDir}`);
 
       if (process.platform === 'win32') {
+        const logFile = path.join(tempDir, 'rafa_updater.log');
+
         if (isInstaller) {
-          // If it is NSIS Setup installer, execute it directly
-          const child = spawn(targetDownloadedPath, [], {
-            detached: true,
-            stdio: 'ignore'
-          });
-          child.unref();
+          // Launch NSIS Setup Installer with ShellExecute / UAC Elevation Support
+          const psInstallerScript = `
+            $log = '${logFile.replace(/'/g, "''")}';
+            "Starting Setup Installer update at $(Get-Date)" | Out-File $log;
+            
+            $oldPid = ${pid};
+            $installerPath = '${targetDownloadedPath.replace(/'/g, "''")}';
+            
+            "Terminating old launcher process $oldPid..." | Out-File $log -Append;
+            try {
+              Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue;
+            } catch {}
+            
+            Start-Sleep -Milliseconds 800;
+            
+            "Executing Setup Installer via ShellExecute: $installerPath" | Out-File $log -Append;
+            try {
+              Start-Process -FilePath $installerPath -ErrorAction Stop;
+              "Setup Installer launched successfully!" | Out-File $log -Append;
+            } catch {
+              "Error starting Setup Installer: $_" | Out-File $log -Append;
+            }
+          `.trim().replace(/\r?\n\s*/g, ' ');
+
+          const helper = spawn(
+            'powershell.exe',
+            ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psInstallerScript],
+            {
+              detached: true,
+              stdio: 'ignore',
+              windowsHide: true
+            }
+          );
+          helper.unref();
         } else {
-          // Robust PowerShell Updater with process release and instant hot-swap
+          // Robust PowerShell Updater with process release and instant hot-swap for Portable
           const newFileNameInDir = path.join(realExecDir, fileName || 'Rafa-MC-LAUNCHER.exe');
-          const logFile = path.join(tempDir, 'rafa_updater.log');
 
           const psScript = `
             $log = '${logFile.replace(/'/g, "''")}';
-            "Starting update hot-swap at $(Get-Date)" | Out-File $log;
+            "Starting portable update hot-swap at $(Get-Date)" | Out-File $log;
             
             $oldPid = ${pid};
             $newExe = '${targetDownloadedPath.replace(/'/g, "''")}';
