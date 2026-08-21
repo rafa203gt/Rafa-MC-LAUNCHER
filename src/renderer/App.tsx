@@ -1,19 +1,30 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { UpdateBanner } from './components/UpdateBanner';
+import { RemoteAlertBanner } from './components/RemoteAlertBanner';
 import { ServerBanner } from './components/ServerBanner';
 import { PlayControls } from './components/PlayControls';
 import { QuickToolsBar } from './components/QuickToolsBar';
+import { NewsFeedCard } from './components/NewsFeedCard';
 import { ModpackView } from './components/ModpackView';
 import { InstancesView } from './components/InstancesView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConsoleModal } from './components/ConsoleModal';
-import { AppSettings, ServerStatusResult, ProgressEventPayload, MinecraftInstance } from './types';
+import {
+  AppSettings,
+  ServerStatusResult,
+  ProgressEventPayload,
+  MinecraftInstance,
+  RemoteLauncherConfig,
+  NewsAnnouncement
+} from './types';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'play' | 'instances' | 'mods' | 'settings' | 'console'>('play');
   const [activeInstance, setActiveInstance] = useState<MinecraftInstance | null>(null);
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
+  const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
+  const [news, setNews] = useState<NewsAnnouncement[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     username: 'Jugador',
     minRam: 2048,
@@ -23,7 +34,7 @@ export const App: React.FC = () => {
     autoConnect: false,
     serverIp: 'play.tuserver.com',
     serverPort: 25565,
-    serverName: 'Rafa Server',
+    serverName: 'All the Mods 10 (ATM10)',
     minecraftVersion: '1.21.1',
     modLoader: 'neoforge',
     modLoaderVersion: '21.1.247',
@@ -56,7 +67,30 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Load initial settings & active instance
+  const loadRemoteData = useCallback(async () => {
+    try {
+      if (window.launcherAPI?.getRemoteConfig) {
+        const remote = await window.launcherAPI.getRemoteConfig();
+        if (remote) {
+          setRemoteConfig(remote);
+          setSettings((prev) => ({
+            ...prev,
+            serverName: remote.server_name || prev.serverName,
+            serverIp: remote.server_ip || prev.serverIp,
+            serverPort: remote.server_port || prev.serverPort
+          }));
+        }
+      }
+      if (window.launcherAPI?.getNews) {
+        const newsList = await window.launcherAPI.getNews();
+        if (newsList) setNews(newsList);
+      }
+    } catch (err) {
+      console.warn('Error cargando datos remotos de Supabase:', err);
+    }
+  }, []);
+
+  // Load initial settings & active instance & remote config
   useEffect(() => {
     if (window.launcherAPI?.getSettings) {
       window.launcherAPI.getSettings().then((loaded) => {
@@ -68,7 +102,8 @@ export const App: React.FC = () => {
     }
 
     loadInstances();
-  }, [loadInstances]);
+    loadRemoteData();
+  }, [loadInstances, loadRemoteData]);
 
   // Ping Server Status
   const checkServerStatus = useCallback(async () => {
@@ -120,6 +155,11 @@ export const App: React.FC = () => {
 
   const handleLaunch = async () => {
     if (isLaunching) return;
+
+    if (remoteConfig?.maintenance_mode) {
+      alert(remoteConfig.maintenance_message || 'El juego se encuentra en mantenimiento en este momento.');
+      return;
+    }
 
     setIsLaunching(true);
     setProgress({
@@ -214,6 +254,9 @@ export const App: React.FC = () => {
       {/* App Auto-Update Notification */}
       <UpdateBanner />
 
+      {/* Remote Live Alert & Maintenance Banner */}
+      <RemoteAlertBanner remoteConfig={remoteConfig} />
+
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto p-6 max-w-6xl w-full mx-auto space-y-6">
         {activeTab === 'play' && (
@@ -245,6 +288,9 @@ export const App: React.FC = () => {
               onReinstallModpack={isModded ? handleReinstallModpack : undefined}
               isModded={isModded}
             />
+
+            {/* Live Community News from Supabase */}
+            <NewsFeedCard news={news} />
           </div>
         )}
 

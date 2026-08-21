@@ -12,7 +12,9 @@
     "pack-builder": "node scripts/build-manifest.js",
     "publish-pack": "node scripts/publish-modpack.js",
     "sync-mod": "node scripts/update-single-mod.js",
-    "release:app": "node scripts/release-app.js"
+    "release:app": "node scripts/release-app.js",
+    "admin": "npm --prefix admin-panel run dev",
+    "admin:build": "npm --prefix admin-panel run build"
   },
   "keywords": [
     "minecraft",
@@ -25,6 +27,7 @@
   "author": "rafa203gt",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.9",
     "clsx": "^2.1.1",

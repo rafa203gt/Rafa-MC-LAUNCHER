@@ -9,6 +9,7 @@ import { serverPinger } from './server-pinger';
 import { minecraftLauncher } from './launcher';
 import { appUpdater } from './app-updater';
 import { instanceManager } from './instance-manager';
+import { remoteConfigManager } from './remote-config';
 
 // Global error handlers to prevent sudden crashes
 process.on('uncaughtException', (err) => {
@@ -209,6 +210,15 @@ ipcMain.handle('updater:download', async (_event, downloadUrl: string, fileName:
       mainWindow.webContents.send('updater:progress', progress);
     }
   });
+});
+
+// 7. Remote Live Config & News (Supabase)
+ipcMain.handle('remote:config', async () => {
+  return remoteConfigManager.fetchRemoteConfig();
+});
+
+ipcMain.handle('remote:news', async () => {
+  return remoteConfigManager.fetchNews();
 });
 
 // 7. Window Controls

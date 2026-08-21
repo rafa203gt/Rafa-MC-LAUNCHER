@@ -23,6 +23,10 @@ export const API = {
   createInstance: (data: any) => ipcRenderer.invoke('instances:create', data),
   deleteInstance: (instanceId: string) => ipcRenderer.invoke('instances:delete', instanceId),
 
+  // Remote Live Config & News (Supabase)
+  getRemoteConfig: () => ipcRenderer.invoke('remote:config'),
+  getNews: () => ipcRenderer.invoke('remote:news'),
+
   // Window Controls
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
