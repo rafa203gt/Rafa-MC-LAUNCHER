@@ -4,31 +4,11 @@ import path from 'node:path';
 import os from 'node:os';
 import https from 'node:https';
 import http from 'node:http';
-import { spawn } from 'node:child_process';
 import axios from 'axios';
 import { ProgressTracker } from './progress-tracker';
 
 const REPO_OWNER = 'rafa203gt';
 const REPO_NAME = 'Rafa-MC-LAUNCHER';
-
-// Extreme performance network agent with TCP low-latency tuning
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 128,
-  maxFreeSockets: 64,
-  timeout: 60000,
-  family: 4,
-  noDelay: true
-});
-
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 128,
-  maxFreeSockets: 64,
-  timeout: 60000,
-  family: 4,
-  noDelay: true
-});
 
 export interface AppUpdateInfo {
   hasUpdate: boolean;
@@ -63,7 +43,6 @@ export class AppUpdater {
   }
 
   public getRealExecutablePath(): string {
-    // In electron-builder portable builds, PORTABLE_EXECUTABLE_FILE points to the real .exe file
     if (process.env.PORTABLE_EXECUTABLE_FILE && fs.existsSync(process.env.PORTABLE_EXECUTABLE_FILE)) {
       return process.env.PORTABLE_EXECUTABLE_FILE;
     }
@@ -146,140 +125,55 @@ export class AppUpdater {
     fileName: string,
     onProgress?: (progress: UpdateDownloadProgress) => void
   ): Promise<void> {
-    if (this.isDownloading) return;
+    if (this.isDownloading) {
+      console.log('[AppUpdater] Ya hay una descarga en progreso.');
+      return;
+    }
     this.isDownloading = true;
 
     try {
-      const tempDir = os.tmpdir();
-      const targetDownloadedPath = path.join(
-        tempDir,
-        `update_${Date.now()}_${fileName || 'Rafa-Launcher-Update.exe'}`
-      );
+      const realExecDir = this.getRealExecutableDir();
+      const realExecPath = this.getRealExecutablePath();
+      const isPortable = this.isRunningPortable();
+      const isInstaller = fileName.toLowerCase().includes('setup') || !isPortable;
 
-      console.log(`[AppUpdater] ⚡ Descargando actualización de alta velocidad: ${downloadUrl}`);
+      console.log(`[AppUpdater] Iniciando descarga de actualización: ${downloadUrl}`);
+      console.log(`[AppUpdater] Modo: ${isInstaller ? 'Instalador Setup' : 'Portable'}`);
 
-      // Fast, non-blocking stream download with 8MB buffer and EMA speed tracking
-      await this.downloadHighSpeedStream(downloadUrl, targetDownloadedPath, (loaded, total, speed, speedBytes) => {
+      // Destination path
+      const targetPath = isInstaller
+        ? path.join(os.tmpdir(), `update_${Date.now()}_${fileName}`)
+        : path.join(realExecDir, fileName);
+
+      // Download file with live speed tracker
+      await this.downloadHighSpeedStream(downloadUrl, targetPath, (loaded, total, speed, speedBytes) => {
         if (onProgress) {
           const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
           onProgress({ percent, transferred: loaded, total, speed, speedBytes });
         }
       });
 
-      const realExecPath = this.getRealExecutablePath();
-      const realExecDir = this.getRealExecutableDir();
-      const pid = process.pid;
-      const isInstaller = fileName.toLowerCase().includes('setup') || !this.isRunningPortable();
-
-      console.log(`[AppUpdater] Actualización descargada con éxito.`);
-      console.log(`[AppUpdater] Tipo de ejecutable: ${isInstaller ? 'Instalador Setup' : 'Portable'}`);
-      console.log(`[AppUpdater] Ruta ejecutable actual: ${realExecPath}`);
-      console.log(`[AppUpdater] Directorio de destino: ${realExecDir}`);
+      console.log(`[AppUpdater] Descarga completada en: ${targetPath}`);
 
       if (process.platform === 'win32') {
-        const logFile = path.join(tempDir, 'rafa_updater.log');
-
         if (isInstaller) {
-          // Launch NSIS Setup Installer with ShellExecute / UAC Elevation Support
-          const psInstallerScript = `
-            $log = '${logFile.replace(/'/g, "''")}';
-            "Starting Setup Installer update at $(Get-Date)" | Out-File $log;
-            
-            $oldPid = ${pid};
-            $installerPath = '${targetDownloadedPath.replace(/'/g, "''")}';
-            
-            "Terminating old launcher process $oldPid..." | Out-File $log -Append;
-            try {
-              Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue;
-            } catch {}
-            
-            Start-Sleep -Milliseconds 800;
-            
-            "Executing Setup Installer via ShellExecute: $installerPath" | Out-File $log -Append;
-            try {
-              Start-Process -FilePath $installerPath -ErrorAction Stop;
-              "Setup Installer launched successfully!" | Out-File $log -Append;
-            } catch {
-              "Error starting Setup Installer: $_" | Out-File $log -Append;
-            }
-          `.trim().replace(/\r?\n\s*/g, ' ');
-
-          const helper = spawn(
-            'powershell.exe',
-            ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psInstallerScript],
-            {
-              detached: true,
-              stdio: 'ignore',
-              windowsHide: true
-            }
-          );
-          helper.unref();
+          // Launch installer directly via Windows ShellExecute (guarantees UAC prompt & GUI)
+          console.log(`[AppUpdater] Ejecutando instalador Setup: ${targetPath}`);
+          await shell.openPath(targetPath);
         } else {
-          // Robust PowerShell Updater with process release and instant hot-swap for Portable
-          const newFileNameInDir = path.join(realExecDir, fileName || 'Rafa-MC-LAUNCHER.exe');
-
-          const psScript = `
-            $log = '${logFile.replace(/'/g, "''")}';
-            "Starting portable update hot-swap at $(Get-Date)" | Out-File $log;
-            
-            $oldPid = ${pid};
-            $newExe = '${targetDownloadedPath.replace(/'/g, "''")}';
-            $currExe = '${realExecPath.replace(/'/g, "''")}';
-            $destNamedExe = '${newFileNameInDir.replace(/'/g, "''")}';
-            
-            "Terminating any lingering launcher processes..." | Out-File $log -Append;
-            try {
-              Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue;
-            } catch {}
-            
-            Start-Sleep -Milliseconds 600;
-            
-            $copied = $false;
-            for ($i = 0; $i -lt 30; $i++) {
-              try {
-                "Attempt $($i+1): Copying $newExe to $currExe" | Out-File $log -Append;
-                Copy-Item -Path $newExe -Destination $currExe -Force -ErrorAction Stop;
-                if ($currExe -ne $destNamedExe) {
-                  Copy-Item -Path $newExe -Destination $destNamedExe -Force -ErrorAction SilentlyContinue;
-                }
-                $copied = $true;
-                "Copy successful!" | Out-File $log -Append;
-                break;
-              } catch {
-                "Copy locked ($($_)): retrying..." | Out-File $log -Append;
-                Start-Sleep -Milliseconds 400;
-              }
-            }
-            
-            if ($copied) {
-              "Starting updated executable: $currExe" | Out-File $log -Append;
-              Start-Process -FilePath $currExe;
-            } else {
-              "Starting fallback new named executable: $destNamedExe" | Out-File $log -Append;
-              Start-Process -FilePath $newExe;
-            }
-          `.trim().replace(/\r?\n\s*/g, ' ');
-
-          const helper = spawn(
-            'powershell.exe',
-            ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript],
-            {
-              detached: true,
-              stdio: 'ignore',
-              windowsHide: true
-            }
-          );
-          helper.unref();
+          // Launch new portable version and replace
+          console.log(`[AppUpdater] Abriendo nueva versión portable: ${targetPath}`);
+          await shell.openPath(targetPath);
         }
       } else {
-        await shell.openPath(targetDownloadedPath);
+        await shell.openPath(targetPath);
       }
 
-      // Terminate immediately to release Windows file locks
+      // Exit old launcher cleanly after launching the new version / installer
       setTimeout(() => {
         app.quit();
-        setTimeout(() => app.exit(0), 300);
-      }, 400);
+        setTimeout(() => app.exit(0), 400);
+      }, 800);
     } catch (err: any) {
       this.isDownloading = false;
       console.error(`[AppUpdater] Error aplicando actualización: ${err.message}`);
@@ -303,8 +197,6 @@ export class AppUpdater {
         'User-Agent': 'Rafa-MC-Launcher',
         Accept: 'application/octet-stream, */*'
       },
-      httpsAgent,
-      httpAgent,
       maxRedirects: 10,
       timeout: 60000
     });
