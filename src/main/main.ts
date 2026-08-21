@@ -1,13 +1,18 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import path from 'path';
-import fs from 'fs';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { configStore } from './config-store';
 import { javaManager } from './java-manager';
 import { modSynchronizer } from './mod-sync';
 import { serverPinger } from './server-pinger';
 import { minecraftLauncher } from './launcher';
 
-process.env.DIST = path.join(__dirname, '../dist');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const appPath = app.getAppPath();
+process.env.DIST = app.isPackaged ? path.join(appPath, 'dist') : path.join(__dirname, '../dist');
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public');
 
 let mainWindow: BrowserWindow | null = null;

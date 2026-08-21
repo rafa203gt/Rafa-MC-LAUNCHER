@@ -25,14 +25,12 @@ export interface AppSettings {
 export class ConfigStore {
   private baseDir: string;
   private settingsFile: string;
-  private defaultConfigFile: string;
   private cachedSettings: AppSettings | null = null;
 
   constructor() {
     const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
     this.baseDir = path.join(appData, '.rafa-mc-launcher');
     this.settingsFile = path.join(this.baseDir, 'settings.json');
-    this.defaultConfigFile = path.join(process.cwd(), 'default-config.json');
 
     this.ensureDirs();
   }
@@ -65,10 +63,27 @@ export class ConfigStore {
     this.getRuntimeDir();
   }
 
+  private findDefaultConfigFile(): string | null {
+    const possiblePaths = [
+      path.join(process.cwd(), 'default-config.json'),
+      process.resourcesPath ? path.join(process.resourcesPath, 'default-config.json') : '',
+      process.resourcesPath ? path.join(process.resourcesPath, 'app', 'default-config.json') : '',
+      process.resourcesPath ? path.join(process.resourcesPath, 'app.asar', 'default-config.json') : ''
+    ].filter(Boolean);
+
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+    return null;
+  }
+
   private getDefaultConfig(): Partial<AppSettings> {
     try {
-      if (fs.existsSync(this.defaultConfigFile)) {
-        const raw = fs.readFileSync(this.defaultConfigFile, 'utf-8');
+      const configFile = this.findDefaultConfigFile();
+      if (configFile) {
+        const raw = fs.readFileSync(configFile, 'utf-8');
         const parsed = JSON.parse(raw);
         return {
           serverName: parsed.serverName,
@@ -89,7 +104,7 @@ export class ConfigStore {
         };
       }
     } catch (e) {
-      console.warn('Could not read default-config.json, using defaults', e);
+      console.warn('Could not read default-config.json, using fallback defaults', e);
     }
 
     return {
