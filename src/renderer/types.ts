@@ -51,6 +51,22 @@ export interface InstalledMod {
   modified: string;
 }
 
+export interface AppUpdateInfo {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseName?: string;
+  releaseNotes?: string;
+  downloadUrl?: string;
+  fileName?: string;
+}
+
+export interface UpdateDownloadProgress {
+  percent: number;
+  transferred: number;
+  total: number;
+}
+
 export interface LauncherAPI {
   launchGame: (options: { username: string; minRam?: number; maxRam?: number; autoConnect?: boolean }) => Promise<void>;
   getSettings: () => Promise<AppSettings>;
@@ -59,6 +75,9 @@ export interface LauncherAPI {
   syncModpack: () => Promise<{ synced: number; deleted: number; total: number }>;
   getInstalledMods: () => Promise<InstalledMod[]>;
   openFolder: (type: 'instance' | 'mods' | 'logs' | 'runtime') => Promise<boolean>;
+  checkForUpdates: () => Promise<AppUpdateInfo>;
+  downloadAppUpdate: (downloadUrl: string, fileName: string) => Promise<void>;
+  onUpdateProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void;
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;

@@ -20,6 +20,16 @@ export const API = {
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
 
+  // App Auto-Updater
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  downloadAppUpdate: (downloadUrl: string, fileName: string) =>
+    ipcRenderer.invoke('updater:download', downloadUrl, fileName),
+  onUpdateProgress: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('updater:progress', handler);
+    return () => ipcRenderer.removeListener('updater:progress', handler);
+  },
+
   // Event Listeners
   onProgress: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);

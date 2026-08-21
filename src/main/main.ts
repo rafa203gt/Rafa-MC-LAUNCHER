@@ -7,6 +7,7 @@ import { javaManager } from './java-manager';
 import { modSynchronizer } from './mod-sync';
 import { serverPinger } from './server-pinger';
 import { minecraftLauncher } from './launcher';
+import { appUpdater } from './app-updater';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -143,7 +144,20 @@ ipcMain.handle('system:open-folder', async (_event, type: 'instance' | 'mods' | 
   return true;
 });
 
-// 6. Window Controls
+// 6. App Auto-Updater
+ipcMain.handle('updater:check', async () => {
+  return appUpdater.checkForUpdates();
+});
+
+ipcMain.handle('updater:download', async (_event, downloadUrl: string, fileName: string) => {
+  return appUpdater.downloadAndApplyUpdate(downloadUrl, fileName, (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('updater:progress', progress);
+    }
+  });
+});
+
+// 7. Window Controls
 ipcMain.handle('window:minimize', () => {
   if (mainWindow) mainWindow.minimize();
 });

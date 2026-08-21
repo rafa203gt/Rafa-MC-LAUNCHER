@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
+import { UpdateBanner } from './components/UpdateBanner';
 import { ServerBanner } from './components/ServerBanner';
 import { PlayControls } from './components/PlayControls';
 import { ModpackView } from './components/ModpackView';
@@ -142,6 +143,9 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         statusText={isLaunching ? 'Lanzando juego...' : 'Listo'}
       />
+
+      {/* App Auto-Update Notification */}
+      <UpdateBanner />
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto p-6 max-w-6xl w-full mx-auto space-y-6">
