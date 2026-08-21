@@ -73,6 +73,9 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
+  // Auto-cleanup any older executable versions in user directory
+  appUpdater.cleanupOldVersions();
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

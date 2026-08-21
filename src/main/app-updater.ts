@@ -161,7 +161,7 @@ export class AppUpdater {
           console.log(`[AppUpdater] Ejecutando instalador Setup: ${targetPath}`);
           await shell.openPath(targetPath);
         } else {
-          // Launch new portable version and replace
+          // Launch new portable version directly via Windows ShellExecute
           console.log(`[AppUpdater] Abriendo nueva versión portable: ${targetPath}`);
           await shell.openPath(targetPath);
         }
@@ -178,6 +178,55 @@ export class AppUpdater {
       this.isDownloading = false;
       console.error(`[AppUpdater] Error aplicando actualización: ${err.message}`);
       throw err;
+    }
+  }
+
+  /**
+   * Automatically scans the directory and safely deletes any older version executables
+   */
+  public cleanupOldVersions(): void {
+    setTimeout(() => {
+      try {
+        const execDir = this.getRealExecutableDir();
+        const currentExe = this.getRealExecutablePath().toLowerCase();
+        const currentVer = app.getVersion();
+
+        if (!fs.existsSync(execDir)) return;
+
+        const files = fs.readdirSync(execDir);
+        for (const f of files) {
+          const lower = f.toLowerCase();
+          if (
+            lower.startsWith('rafa-mc-launcher') &&
+            lower.endsWith('.exe') &&
+            !lower.includes('setup')
+          ) {
+            const fullPath = path.join(execDir, f);
+            if (fullPath.toLowerCase() !== currentExe) {
+              const match = f.match(/(\d+\.\d+\.\d+)/);
+              if (match && this.compareVersions(currentVer, match[1]) > 0) {
+                // Retry loop to ensure file locks from closed previous instance are freed
+                this.deleteWithRetry(fullPath, 5);
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[AppUpdater] Error en limpieza de versiones antiguas: ${err.message}`);
+      }
+    }, 2000);
+  }
+
+  private deleteWithRetry(filePath: string, retriesLeft: number): void {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`[AppUpdater] ✅ Versión antigua eliminada con éxito: ${path.basename(filePath)}`);
+      }
+    } catch (err) {
+      if (retriesLeft > 0) {
+        setTimeout(() => this.deleteWithRetry(filePath, retriesLeft - 1), 1000);
+      }
     }
   }
 
@@ -231,7 +280,7 @@ export class AppUpdater {
     });
   }
 
-  private compareVersions(v1: string, v2: string): number {
+  public compareVersions(v1: string, v2: string): number {
     const p1 = v1.split('.').map(Number);
     const p2 = v2.split('.').map(Number);
     for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
