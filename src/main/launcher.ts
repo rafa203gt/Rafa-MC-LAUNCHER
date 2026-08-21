@@ -58,7 +58,8 @@ export class MinecraftLauncher {
     mcVersion: string,
     neoForgeVersion = '21.1.247',
     javaPath?: string,
-    onLog?: (line: string) => void
+    onLog?: (line: string) => void,
+    onProgress?: (payload: ProgressEventPayload) => void
   ): Promise<string> {
     const versionId = `neoforge-${neoForgeVersion}`;
     const versionDir = path.join(instanceDir, 'versions', versionId);
@@ -112,6 +113,15 @@ export class MinecraftLauncher {
     if (!fs.existsSync(vanillaJsonPath) || !fs.existsSync(vanillaJarPath)) {
       if (!fs.existsSync(vanillaDir)) fs.mkdirSync(vanillaDir, { recursive: true });
       if (onLog) onLog(`[Launcher] Descargando cliente base de Minecraft ${mcVersion}...`);
+      if (onProgress) {
+        onProgress({
+          stage: 'assets',
+          task: `Descargando cliente base de Minecraft ${mcVersion}...`,
+          total: 100,
+          current: 35,
+          percent: 35
+        });
+      }
 
       const manifestRes = await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
       const vInfo = manifestRes.data.versions.find((v: any) => v.id === mcVersion);
@@ -130,11 +140,31 @@ export class MinecraftLauncher {
       const tempInstaller = path.join(instanceDir, `installer-${neoForgeVersion}.jar`);
 
       if (onLog) onLog(`[Launcher] Descargando instalador de NeoForge ${neoForgeVersion}...`);
+      if (onProgress) {
+        onProgress({
+          stage: 'assets',
+          task: `Descargando instalador oficial de NeoForge ${neoForgeVersion}...`,
+          total: 100,
+          current: 55,
+          percent: 55
+        });
+      }
+
       const installerRes = await axios.get(installerUrl, { responseType: 'arraybuffer' });
       fs.writeFileSync(tempInstaller, Buffer.from(installerRes.data));
 
       if (javaPath && fs.existsSync(javaPath)) {
         if (onLog) onLog(`[Launcher] Ejecutando parchador binario oficial de NeoForge...`);
+        if (onProgress) {
+          onProgress({
+            stage: 'assets',
+            task: `⚙️ Instalando librerías y cliente NeoForge (primer inicio)...`,
+            total: 100,
+            current: 75,
+            percent: 75
+          });
+        }
+
         await new Promise<void>((resolve, reject) => {
           const proc = spawn(javaPath, ['-jar', tempInstaller, '--installClient', instanceDir], {
             stdio: 'ignore'
@@ -282,7 +312,7 @@ export class MinecraftLauncher {
         };
       } else if (settings.modLoader === 'neoforge') {
         const neoVer = settings.modLoaderVersion || '21.1.247';
-        const versionId = await this.ensureNeoForgeVersionJson(instanceDir, mcVersion, neoVer, javaPath, onLog);
+        const versionId = await this.ensureNeoForgeVersionJson(instanceDir, mcVersion, neoVer, javaPath, onLog, onProgress);
         customVersion = {
           number: mcVersion,
           type: 'release',
@@ -379,16 +409,61 @@ export class MinecraftLauncher {
         quickPlay: quickPlayOption
       };
 
+      const launcher = new Client();
+      this.launcher = launcher;
+
       // Hook MCLC events
-      this.launcher.on('debug', (e: string) => {
+      launcher.on('debug', (e: string) => {
         onLog(`[DEBUG] ${e}`);
+        if (e.includes('Attempting to download assets')) {
+          onProgress({
+            stage: 'assets',
+            task: 'Verificando librerías y recursos de Minecraft...',
+            total: 100,
+            current: 85,
+            percent: 85
+          });
+        } else if (e.includes('Launching with arguments')) {
+          onProgress({
+            stage: 'starting',
+            task: '🚀 Iniciando Java y cargando motor NeoForge...',
+            total: 100,
+            current: 92,
+            percent: 92
+          });
+        }
       });
 
-      this.launcher.on('data', (e: string) => {
+      launcher.on('data', (e: string) => {
         onLog(`[MINECRAFT] ${e}`);
+        if (e.includes('MODLAUNCHER') || e.includes('ModLauncher')) {
+          onProgress({
+            stage: 'running',
+            task: '⚡ Cargando mods de All The Mods 10 en memoria...',
+            total: 100,
+            current: 96,
+            percent: 96
+          });
+        } else if (e.includes('ModDiscoverer') || e.includes('Found mod file')) {
+          onProgress({
+            stage: 'running',
+            task: '⚡ Registrando 479 mods...',
+            total: 100,
+            current: 98,
+            percent: 98
+          });
+        } else if (e.includes('ImmediateWindowHandler') || e.includes('EARLYDISPLAY') || e.includes('OpenGL')) {
+          onProgress({
+            stage: 'running',
+            task: '🎮 ¡Minecraft 1.21.1 iniciado! Abriendo ventana...',
+            total: 100,
+            current: 100,
+            percent: 100
+          });
+        }
       });
 
-      this.launcher.on('progress', (e: any) => {
+      launcher.on('progress', (e: any) => {
         const total = e.total || 100;
         const current = e.task || 0;
         const percent = Math.min(100, Math.round((current / total) * 100));
@@ -401,7 +476,7 @@ export class MinecraftLauncher {
         });
       });
 
-      this.launcher.on('download-status', (e: any) => {
+      launcher.on('download-status', (e: any) => {
         if (e.total && e.current) {
           const percent = Math.round((e.current / e.total) * 100);
           onProgress({
@@ -414,7 +489,7 @@ export class MinecraftLauncher {
         }
       });
 
-      this.launcher.on('close', (code: number) => {
+      launcher.on('close', (code: number) => {
         this.isLaunching = false;
         onLog(`[Launcher] Minecraft cerrado con código de salida: ${code}`);
         onProgress({
@@ -431,13 +506,13 @@ export class MinecraftLauncher {
         stage: 'starting',
         task: 'Iniciando Minecraft...',
         total: 100,
-        current: 100,
-        percent: 100
+        current: 90,
+        percent: 90
       });
 
       onLog(`[Launcher] Lanzando Minecraft ${mcVersion} (${settings.modLoader}) para ${cleanUsername} con RAM: ${minMemory} - ${maxMemory}`);
 
-      await this.launcher.launch(launchOptions);
+      await launcher.launch(launchOptions);
 
       onProgress({
         stage: 'running',
