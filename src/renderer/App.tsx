@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ServerBanner } from './components/ServerBanner';
 import { PlayControls } from './components/PlayControls';
+import { QuickToolsBar } from './components/QuickToolsBar';
 import { ModpackView } from './components/ModpackView';
 import { InstancesView } from './components/InstancesView';
 import { SettingsModal } from './components/SettingsModal';
@@ -12,6 +13,7 @@ import { AppSettings, ServerStatusResult, ProgressEventPayload, MinecraftInstanc
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'play' | 'instances' | 'mods' | 'settings' | 'console'>('play');
   const [activeInstance, setActiveInstance] = useState<MinecraftInstance | null>(null);
+  const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     username: 'Jugador',
     minRam: 2048,
@@ -39,6 +41,21 @@ export const App: React.FC = () => {
   const [progress, setProgress] = useState<ProgressEventPayload | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
+  const loadInstances = useCallback(async () => {
+    try {
+      if (window.launcherAPI?.getInstances) {
+        const list = await window.launcherAPI.getInstances();
+        setInstances(list || []);
+      }
+      if (window.launcherAPI?.getActiveInstance) {
+        const active = await window.launcherAPI.getActiveInstance();
+        if (active) setActiveInstance(active);
+      }
+    } catch (err) {
+      console.warn('Error cargando instancias:', err);
+    }
+  }, []);
+
   // Load initial settings & active instance
   useEffect(() => {
     if (window.launcherAPI?.getSettings) {
@@ -50,12 +67,8 @@ export const App: React.FC = () => {
       });
     }
 
-    if (window.launcherAPI?.getActiveInstance) {
-      window.launcherAPI.getActiveInstance().then((inst) => {
-        if (inst) setActiveInstance(inst);
-      });
-    }
-  }, []);
+    loadInstances();
+  }, [loadInstances]);
 
   // Ping Server Status
   const checkServerStatus = useCallback(async () => {
@@ -120,7 +133,7 @@ export const App: React.FC = () => {
     try {
       // Save current username
       if (window.launcherAPI?.saveSettings) {
-        await window.launcherAPI.saveSettings({ username });
+        await window.launcherAPI.saveSettings({ username, maxRam: settings.maxRam });
       }
 
       await window.launcherAPI.launchGame({
@@ -135,6 +148,33 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleSwitchInstance = async (instanceId: string) => {
+    try {
+      if (window.launcherAPI?.switchInstance) {
+        const updated = await window.launcherAPI.switchInstance(instanceId);
+        setActiveInstance(updated);
+        setSettings((prev) => ({
+          ...prev,
+          minecraftVersion: updated.minecraftVersion,
+          modLoader: updated.modLoader,
+          modLoaderVersion: updated.modLoaderVersion,
+          modpackManifestUrl: updated.modpackManifestUrl,
+          maxRam: updated.customRam || prev.maxRam
+        }));
+        await loadInstances();
+      }
+    } catch (err) {
+      console.error('Error switching instance:', err);
+    }
+  };
+
+  const handleRamChange = (ram: number) => {
+    setSettings((prev) => ({ ...prev, maxRam: ram }));
+    if (window.launcherAPI?.saveSettings) {
+      window.launcherAPI.saveSettings({ maxRam: ram });
+    }
+  };
+
   const handleSaveSettings = async (newSettings: Partial<AppSettings>) => {
     if (window.launcherAPI?.saveSettings) {
       const updated = await window.launcherAPI.saveSettings(newSettings);
@@ -142,6 +182,24 @@ export const App: React.FC = () => {
       checkServerStatus();
     }
   };
+
+  const handleReinstallModpack = async () => {
+    if (!confirm('¿Deseas reparar y reinstalar el modpack? Esto restaurará cualquier archivo dañado o faltante sin borrar tus mundos.')) {
+      return;
+    }
+    try {
+      if (window.launcherAPI?.reinstallModpack) {
+        setIsLaunching(true);
+        await window.launcherAPI.reinstallModpack();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
+  const isModded = activeInstance?.modLoader !== 'vanilla';
 
   return (
     <div className="flex flex-col h-screen bg-mc-darker text-slate-100 overflow-hidden">
@@ -174,9 +232,18 @@ export const App: React.FC = () => {
               username={username}
               setUsername={setUsername}
               maxRam={settings.maxRam}
+              onRamChange={handleRamChange}
+              activeInstance={activeInstance}
+              instances={instances}
+              onSwitchInstance={handleSwitchInstance}
               isLaunching={isLaunching}
               progress={progress}
               onLaunch={handleLaunch}
+            />
+
+            <QuickToolsBar
+              onReinstallModpack={isModded ? handleReinstallModpack : undefined}
+              isModded={isModded}
             />
           </div>
         )}
@@ -193,6 +260,7 @@ export const App: React.FC = () => {
                 modpackManifestUrl: inst.modpackManifestUrl,
                 maxRam: inst.customRam || prev.maxRam
               }));
+              loadInstances();
             }}
             onLaunchInstance={() => {
               setActiveTab('play');

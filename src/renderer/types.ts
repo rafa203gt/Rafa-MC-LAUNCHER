@@ -94,7 +94,7 @@ export interface LauncherAPI {
   syncModpack: () => Promise<{ synced: number; deleted: number; total: number }>;
   reinstallModpack: () => Promise<{ synced: number; deleted: number; total: number }>;
   getInstalledMods: () => Promise<InstalledMod[]>;
-  openFolder: (type: 'instance' | 'mods' | 'logs' | 'runtime') => Promise<boolean>;
+  openFolder: (type: 'instance' | 'mods' | 'logs' | 'runtime' | 'screenshots' | 'saves') => Promise<boolean>;
   getInstances: () => Promise<MinecraftInstance[]>;
   getActiveInstance: () => Promise<MinecraftInstance>;
   switchInstance: (instanceId: string) => Promise<MinecraftInstance>;

@@ -169,7 +169,7 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
 });
 
 // 5. System & Folder Explorer
-ipcMain.handle('system:open-folder', async (_event, type: 'instance' | 'mods' | 'logs' | 'runtime') => {
+ipcMain.handle('system:open-folder', async (_event, type: 'instance' | 'mods' | 'logs' | 'runtime' | 'screenshots' | 'saves') => {
   const base = configStore.getBaseDir();
   let target = base;
 
@@ -177,6 +177,12 @@ ipcMain.handle('system:open-folder', async (_event, type: 'instance' | 'mods' | 
     target = configStore.getInstanceDir();
   } else if (type === 'mods') {
     target = path.join(configStore.getInstanceDir(), 'mods');
+    if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
+  } else if (type === 'screenshots') {
+    target = path.join(configStore.getInstanceDir(), 'screenshots');
+    if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
+  } else if (type === 'saves') {
+    target = path.join(configStore.getInstanceDir(), 'saves');
     if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
   } else if (type === 'logs') {
     target = path.join(configStore.getInstanceDir(), 'logs');
