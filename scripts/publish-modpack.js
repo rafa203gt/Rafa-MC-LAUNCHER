@@ -79,6 +79,7 @@ async function main() {
     'resourcepacks',
     'saves',
     'shaderpacks',
+    'versions',
     'manifest.json',
     'minecraftinstance.json'
   ];

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import axios from 'axios';
 import { createRequire } from 'node:module';
 import { configStore, AppSettings } from './config-store';
@@ -55,41 +56,102 @@ export class MinecraftLauncher {
   private async ensureNeoForgeVersionJson(
     instanceDir: string,
     mcVersion: string,
+    neoForgeVersion = '21.1.247',
+    javaPath?: string,
     onLog?: (line: string) => void
-  ): Promise<void> {
-    const versionsDir = path.join(instanceDir, 'versions', 'neoforge');
-    const versionJsonPath = path.join(versionsDir, 'neoforge.json');
+  ): Promise<string> {
+    const versionId = `neoforge-${neoForgeVersion}`;
+    const versionDir = path.join(instanceDir, 'versions', versionId);
+    const versionJsonPath = path.join(versionDir, `${versionId}.json`);
+    const patchedClientJar = path.join(
+      instanceDir,
+      'libraries',
+      'net',
+      'neoforged',
+      'neoforge',
+      neoForgeVersion,
+      `neoforge-${neoForgeVersion}-client.jar`
+    );
 
-    if (fs.existsSync(versionJsonPath)) {
-      return;
+    if (fs.existsSync(versionJsonPath) && fs.existsSync(patchedClientJar)) {
+      return versionId;
     }
 
-    if (!fs.existsSync(versionsDir)) {
-      fs.mkdirSync(versionsDir, { recursive: true });
-    }
-
-    // 1. Try reading from minecraftinstance.json if extracted from modpack
-    const instanceMetaPath = path.join(instanceDir, 'minecraftinstance.json');
-    if (fs.existsSync(instanceMetaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(instanceMetaPath, 'utf-8'));
-        if (meta.baseModLoader?.versionJson) {
-          const parsed = JSON.parse(meta.baseModLoader.versionJson);
-          parsed.id = 'neoforge';
-          fs.writeFileSync(versionJsonPath, JSON.stringify(parsed, null, 2), 'utf-8');
-          if (onLog) {
-            onLog(`[Launcher] Perfil NeoForge generado desde el modpack instalado.`);
-          }
-          return;
-        }
-      } catch (err) {
-        console.warn('Could not parse minecraftinstance.json versionJson', err);
-      }
+    if (!fs.existsSync(versionDir)) {
+      fs.mkdirSync(versionDir, { recursive: true });
     }
 
     if (onLog) {
-      onLog(`[Launcher] Generando perfil base de NeoForge para Minecraft ${mcVersion}...`);
+      onLog(`[Launcher] Configurando binarios de NeoForge ${neoForgeVersion} y Minecraft ${mcVersion}...`);
     }
+
+    // 1. Ensure launcher_profiles.json
+    const profilesPath = path.join(instanceDir, 'launcher_profiles.json');
+    if (!fs.existsSync(profilesPath)) {
+      fs.writeFileSync(
+        profilesPath,
+        JSON.stringify(
+          {
+            profiles: {
+              [mcVersion]: { name: mcVersion, lastVersionId: mcVersion }
+            },
+            clientToken: '88888888-8888-8888-8888-888888888888'
+          },
+          null,
+          2
+        ),
+        'utf-8'
+      );
+    }
+
+    // 2. Ensure vanilla version files
+    const vanillaDir = path.join(instanceDir, 'versions', mcVersion);
+    const vanillaJsonPath = path.join(vanillaDir, `${mcVersion}.json`);
+    const vanillaJarPath = path.join(vanillaDir, `${mcVersion}.jar`);
+
+    if (!fs.existsSync(vanillaJsonPath) || !fs.existsSync(vanillaJarPath)) {
+      if (!fs.existsSync(vanillaDir)) fs.mkdirSync(vanillaDir, { recursive: true });
+      if (onLog) onLog(`[Launcher] Descargando cliente base de Minecraft ${mcVersion}...`);
+
+      const manifestRes = await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
+      const vInfo = manifestRes.data.versions.find((v: any) => v.id === mcVersion);
+      if (vInfo) {
+        const vJsonRes = await axios.get(vInfo.url);
+        fs.writeFileSync(vanillaJsonPath, JSON.stringify(vJsonRes.data, null, 2), 'utf-8');
+        const clientUrl = vJsonRes.data.downloads.client.url;
+        const clientRes = await axios.get(clientUrl, { responseType: 'arraybuffer' });
+        fs.writeFileSync(vanillaJarPath, Buffer.from(clientRes.data));
+      }
+    }
+
+    // 3. Download and run installer if patched client jar is not ready
+    if (!fs.existsSync(patchedClientJar)) {
+      const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${neoForgeVersion}/neoforge-${neoForgeVersion}-installer.jar`;
+      const tempInstaller = path.join(instanceDir, `installer-${neoForgeVersion}.jar`);
+
+      if (onLog) onLog(`[Launcher] Descargando instalador de NeoForge ${neoForgeVersion}...`);
+      const installerRes = await axios.get(installerUrl, { responseType: 'arraybuffer' });
+      fs.writeFileSync(tempInstaller, Buffer.from(installerRes.data));
+
+      if (javaPath && fs.existsSync(javaPath)) {
+        if (onLog) onLog(`[Launcher] Ejecutando parchador binario oficial de NeoForge...`);
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(javaPath, ['-jar', tempInstaller, '--installClient', instanceDir], {
+            stdio: 'ignore'
+          });
+          proc.on('close', (code: number | null) => {
+            try {
+              fs.unlinkSync(tempInstaller);
+            } catch {}
+            if (code === 0) resolve();
+            else reject(new Error(`NeoForge installer falló con código: ${code}`));
+          });
+          proc.on('error', reject);
+        });
+      }
+    }
+
+    return versionId;
   }
 
   private async ensureFabricVersionJson(
@@ -219,11 +281,12 @@ export class MinecraftLauncher {
           custom: 'fabric'
         };
       } else if (settings.modLoader === 'neoforge') {
-        await this.ensureNeoForgeVersionJson(instanceDir, mcVersion, onLog);
+        const neoVer = settings.modLoaderVersion || '21.1.247';
+        const versionId = await this.ensureNeoForgeVersionJson(instanceDir, mcVersion, neoVer, javaPath, onLog);
         customVersion = {
           number: mcVersion,
           type: 'release',
-          custom: 'neoforge'
+          custom: versionId
         };
       }
 
@@ -240,6 +303,7 @@ export class MinecraftLauncher {
 
       let neoForgeJvmArgs: string[] = [];
       if (settings.modLoader === 'neoforge') {
+        const neoVer = settings.modLoaderVersion || '21.1.247';
         const moduleJars = [
           path.join(libDir, 'cpw', 'mods', 'bootstraplauncher', '2.0.2', 'bootstraplauncher-2.0.2.jar'),
           path.join(libDir, 'cpw', 'mods', 'securejarhandler', '3.0.8', 'securejarhandler-3.0.8.jar'),
@@ -253,7 +317,7 @@ export class MinecraftLauncher {
 
         neoForgeJvmArgs = [
           '-Djava.net.preferIPv6Addresses=system',
-          `-DignoreList=client-extra,${mcVersion}.jar,neoforge.jar`,
+          `-DignoreList=client-extra,${mcVersion}.jar,neoforge.jar,neoforge-${neoVer}.jar`,
           `-DlibraryDirectory=${libDir}`,
           '-Dneoforge.earlydisplay=false',
           '-Dfml.earlyprogresswindow=false',
