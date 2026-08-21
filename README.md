@@ -1,83 +1,185 @@
-# 🚀 Rafa-MC-LAUNCHER (Minecraft 1.20.1)
+# 🎮 Rafa-MC-LAUNCHER (Minecraft 1.21.1 & All The Mods 10)
 
-Launcher personalizado de Minecraft para la comunidad del servidor, diseñado para usuarios **No-Premium** (y Premium), con **auto-instalación de Java 17**, **sincronización diferencial de mods/configs** y **conexión directa en 1 clic**.
+<div align="center">
+
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/rafa203gt/Rafa-MC-LAUNCHER?color=10b981&label=Release&style=for-the-badge)
+![Electron](https://img.shields.io/badge/Electron-29.4-47848F?style=for-the-badge&logo=electron&logoColor=white)
+![React](https://img.shields.io/badge/React-18.2-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)
+
+**Launcher personalizado de Minecraft de alto rendimiento para All The Mods 10 (ATM 10) e Instancias Vanilla de cualquier versión.**  
+Diseñado para jugadores **No-Premium y Premium**, con **auto-instalación de Java 21/17/8**, **descargas aceleradas en 16 hilos**, **auto-actualizaciones en caliente**, **flags anti-lag G1GC** y **conexión directa en 1 clic**.
+
+[📥 Descargar Última Versión (GitHub Releases)](https://github.com/rafa203gt/Rafa-MC-LAUNCHER/releases/latest) • [✨ Características](#-características-principales) • [🚀 Instalación](#-instalación-y-desarrollo) • [📦 Gestión de Modpacks](#-gestión-y-publicación-de-mods)
 
 ---
+
+</div>
 
 ## ✨ Características Principales
 
-- 🎮 **Minecraft 1.20.1 (Fabric / Forge / NeoForge):** Descarga automática de assets oficiales, dependencias y librerías nativas desde los servidores de Mojang.
-- ☕ **Gestión Automática de Java 17:** Descarga e instala en segundo plano **OpenJDK 17 (Adoptium Eclipse Temurin)** en un directorio aislado (`%APPDATA%/.rafa-mc-launcher/runtime`), para que los jugadores no tengan que instalar Java manualmente.
-- 👤 **Acceso No-Premium:** Permite ingresar cualquier apodo/nickname directamente, generando un UUID offline válido con avatar en tiempo real.
-- ⚡ **Auto-Conexión Directa:** Al pulsar "JUGAR", Minecraft arranca y se conecta automáticamente a la IP y puerto del servidor (`--quickPlayMultiplayer`).
-- 📦 **Sincronización Diferencial con GitHub Releases:**
-  - Consulta el archivo `manifest.json`.
-  - Calcula hashes SHA1 para descargar solo los mods nuevos o actualizados.
-  - Elimina automáticamente mods obsoletos o desactualizados.
-- 📡 **Monitor de Estado del Servidor en Vivo:** Muestra jugadores conectados, ping/latencia y el MOTD en tiempo real.
-- 🛠️ **Panel de Ajustes Completo:** Slider interactivo de asignación de memoria RAM (2 GB a 16 GB), resolución de pantalla, pantalla completa y consola de logs en vivo.
+### 🌌 Modpack Insignia: All The Mods 10 (ATM 10)
+- **Minecraft 1.21.1 + NeoForge 21.1.247:** Configurado de fábrica con más de 470 mods de magia, tecnología, misiones FTB Quests y nuevas dimensiones.
+- **Sincronización Inteligente Diferencial:** Descarga el bundle completo en segundos durante la primera instalación y sincroniza mods sueltos de forma incremental mediante hashes SHA1.
+- **Botón de Reinstalación Limpia:** Permite reparar cualquier mod corrupto o faltante con 1 clic preservando intactos tus mundos guardados.
+
+### ⛏️ Instancias Vanilla Dinámicas Multi-Versión
+- **Selector Universal de Versiones Oficiales:** Crea perfiles Vanilla para **cualquier versión oficial de Mojang** (`1.21.4`, `1.21.3`, `1.21.1`, `1.20.6`, `1.20.1`, `1.19.4`, `1.18.2`, `1.16.5`, `1.12.2`, `1.8.9`, `1.7.10` o versiones personalizadas).
+- **Descarga 100% Automatizada:** Descarga el cliente base oficial, librerías nativas (LWJGL) y assets de sonido y texturas directamente desde los servidores de Mojang.
+
+### ⚡ Motor de Descargas Turbo (16 Hilos Paralelos)
+- **Multi-Segmentos HTTP Range:** Descargas divididas en **16 fragmentos simultáneos** para paquetes pesados (Modpack bundle, Java OpenJDK, cliente de juego y actualizaciones).
+- **Piscina Concurrente de 64 Conexiones:** Para la sincronización ultrarrápida de librerías y mods sueltos.
+- **Optimización de Red TCP:** Forzado de IPv4 (`family: 4`) y `noDelay: true` para latencia cero y buffers de disco de **4 MB**.
+- **Temporizadores Suaves EMA:** Cálculo preciso de velocidad (`MB/s`) y tiempo restante (`ETA`) mediante Media Móvil Exponencial (Rolling Window de 1.5s).
+
+### 🔄 Auto-Actualizador In-App Hot-Swap
+- **Actualizaciones Desatendidas:** Al publicar una nueva versión en GitHub, el launcher avisa con un banner en 1 clic.
+- **Detección Real de Rutas Portables (`PORTABLE_EXECUTABLE_FILE`):** Sustituye automáticamente el archivo `.exe` en la carpeta de Descargas/Escritorio del usuario y reinicia el programa en la nueva versión de forma 100% invisible.
+
+### 🛡️ Optimización de Rendimiento & Anti-Lag (G1GC)
+- **Flags de Garbage Collection de Latencia Ultra-Baja:** Parámetros JVM profesionales (`-XX:MaxGCPauseMillis=100`, `-XX:+AlwaysPreTouch`, `-XX:+DisableExplicitGC`) para eliminar micro-tirones y congelamientos de FPS.
+- **Protección Dinámica de Memoria RAM:** Detecta la RAM física del equipo y reserva siempre un mínimo de **1.5 GB libres para Windows**, evitando caídas con `OutOfMemoryError` o bloqueos del PC.
+
+### 🎨 Dashboard Hero & Hub de Herramientas Rápidas
+- **Hero Launch Station:** Selector desplegable de perfiles activos, control deslizante de RAM y botón masivo *"JUGAR AHORA"*.
+- **Avatar 3D Dinámico:** Muestra la cabeza de tu skin de Minecraft en tiempo real según el apodo que introduzcas.
+- **Quick Tools Bar:** Accesos directos para abrir en 1 clic:
+  - 📁 **Carpeta Juego** (`.minecraft` / instancia)
+  - 📸 **Capturas de Pantalla** (`screenshots`)
+  - 🗺️ **Mundos Guardados** (`saves` para copias de seguridad)
+  - 📦 **Carpeta de Mods** (`mods`)
+  - 📜 **Registros y Consola** (`logs`)
+- **Banner de Servidor:** Copia de IP en 1 clic con confirmación visual y medidor de calidad de ping (🟢 `< 60ms`, 🟡 `< 120ms`, 🔴 `> 120ms`).
 
 ---
 
-## 🛠️ Requisitos Previos
+## 🛠️ Requisitos del Sistema
 
-- [Node.js 18+](https://nodejs.org/)
-- npm / yarn / pnpm
+- **Sistema Operativo:** Windows 10 / Windows 11 (64-bit).
+- **Memoria RAM:** 8 GB mínimo (16 GB recomendado para All The Mods 10).
+- **Java:** **No es necesario instalar Java.** El launcher descarga automáticamente la versión correcta (Adoptium OpenJDK 21, 17 u 8) en un directorio aislado (`%APPDATA%/.rafa-mc-launcher/runtime`).
 
 ---
 
 ## 🚀 Instalación y Desarrollo
 
-1. **Instalar dependencias:**
-   ```bash
-   npm install
-   ```
+### Requisitos de Desarrollo
+- [Node.js 18+](https://nodejs.org/)
+- Git
 
-2. **Ejecutar en modo desarrollo:**
-   ```bash
-   npm run dev
-   ```
+### 1. Clonar el repositorio:
+```bash
+git clone https://github.com/rafa203gt/Rafa-MC-LAUNCHER.git
+cd Rafa-MC-LAUNCHER
+```
 
-3. **Compilar instalador y ejecutable portable para Windows (.exe):**
-   ```bash
-   npm run build:win
-   ```
-   *El ejecutable generado se guardará en la carpeta `release/` listo para distribuir.*
+### 2. Instalar dependencias:
+```bash
+npm install
+```
+
+### 3. Ejecutar en modo desarrollo:
+```bash
+npm run dev
+```
+
+### 4. Ejecutar pruebas unitarias:
+```bash
+npm test
+```
+
+### 5. Compilar binarios de Windows (Portable e Instalador):
+```bash
+npm run build:win
+```
+*Los archivos `.exe` se generarán en la carpeta `release/`.*
 
 ---
 
-## 📦 Cómo Actualizar el Modpack del Servidor
+## 📦 Gestión y Publicación de Mods
 
-1. Coloca los nuevos archivos `.jar` en la carpeta `modpack/mods/` y las configs en `modpack/config/`.
-2. Ejecuta el generador de manifiesto:
-   ```bash
-   npm run pack-builder
-   ```
-3. Sube los archivos `.jar` a una Release en tu repositorio de GitHub (por ejemplo tag `v1.0.0`).
-4. Haz `git commit` y `git push` de `modpack/manifest.json`.
-5. ¡Listo! Cuando los jugadores abran el launcher, sus clientes se sincronizarán automáticamente.
+El launcher incluye scripts automatizados para gestionar modpacks y lanzar actualizaciones:
+
+### 1. Sincronizar un solo mod nuevo o actualizado:
+```bash
+npm run sync-mod
+```
+
+### 2. Generar el manifiesto del modpack:
+```bash
+npm run pack-builder
+```
+
+### 3. Publicar el modpack completo en GitHub:
+```bash
+npm run publish-pack
+```
+
+### 4. Compilar y publicar una nueva versión del Launcher (GitHub Release):
+```bash
+npm run release:app
+```
 
 ---
 
 ## ⚙️ Configuración del Servidor (`default-config.json`)
 
-Edita `default-config.json` para cambiar la IP o versión por defecto:
+Puedes personalizar la configuración predeterminada del launcher editando [`default-config.json`](file:///C:/Users/rafa2/Downloads/rafa-mc-launcher/default-config.json):
 
 ```json
 {
-  "serverName": "Rafa Server",
+  "serverName": "All the Mods 10 (ATM10)",
   "serverIp": "play.tuserver.com",
   "serverPort": 25565,
-  "autoConnect": true,
-  "minecraftVersion": "1.20.1",
-  "modLoader": "fabric",
-  "modLoaderVersion": "0.15.11",
-  "modpackManifestUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json"
+  "autoConnect": false,
+  "minecraftVersion": "1.21.1",
+  "modLoader": "neoforge",
+  "modLoaderVersion": "21.1.247",
+  "modpackManifestUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json",
+  "newsFeedUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/news.json",
+  "client": {
+    "minRam": 4096,
+    "maxRam": 8192,
+    "fullscreen": false,
+    "width": 1280,
+    "height": 720
+  }
 }
+```
+
+---
+
+## 🏗️ Estructura del Proyecto
+
+```text
+rafa-mc-launcher/
+├── src/
+│   ├── main/                  # Proceso Principal de Electron
+│   │   ├── main.ts            # Punto de entrada, ventanas y eventos IPC
+│   │   ├── launcher.ts        # Motor de inicio de Minecraft y flags JVM
+│   │   ├── mod-sync.ts        # Sincronizador multi-hilo de mods y bundles
+│   │   ├── java-manager.ts    # Gestor y descargador de Adoptium OpenJDK
+│   │   ├── instance-manager.ts# Gestor de instancias y perfiles aislados
+│   │   ├── app-updater.ts     # Auto-actualizador in-app hot-swap
+│   │   ├── progress-tracker.ts# Estimador suave de velocidad y tiempo (EMA)
+│   │   └── config-store.ts    # Almacenamiento persistente de ajustes
+│   ├── renderer/              # Interfaz de Usuario (React + TailwindCSS)
+│   │   ├── App.tsx            # Vista principal y orquestador de pestañas
+│   │   ├── components/        # Componentes UI (Dashboard, Modal, Tools, etc.)
+│   │   └── assets/            # Logos e imágenes empaquetadas (ATM10 logo)
+├── scripts/                   # Scripts de publicación y empaquetado
+├── modpack/                   # Manifiesto y archivos locales del modpack
+└── release/                   # Ejecutables compilados para Windows (.exe)
 ```
 
 ---
 
 ## 📄 Licencia
 
-MIT © [rafa203gt](https://github.com/rafa203gt)
+Este proyecto está bajo la Licencia **MIT** — consulta el archivo [LICENSE](LICENSE) para más detalles.
+
+Desarrollado con ❤️ por [rafa203gt](https://github.com/rafa203gt).
