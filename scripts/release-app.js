@@ -158,7 +158,7 @@ async function main() {
     JSON.stringify({
       tag_name: tag,
       name: `Rafa MC Launcher ${tag}`,
-      body: `### Actualización Automática de Rafa MC Launcher ${tag}\n- Actualizaciones y mejoras de rendimiento.\n- Sincronización instantánea de mods.\n- Soporte para Java 21 y NeoForge 1.21.1.`,
+      body: `### 🚀 Rafa MC Launcher ${tag} - Actualización Oficial\n\n- ⚡ **Acelerador de Descarga Multi-Segmento:** Descarga de modpacks en 8 a 16 hilos simultáneos saturando el ancho de banda.\n- 🔄 **Botón de Reinstalación / Reparación:** Reparación en 1 clic que limpia mods corruptos preservando partidas.\n- 🗂️ **Gestor Multi-Instancia:** Selector de modpacks con perfiles aislados (All The Mods 10, Vanilla, Custom).\n- 📲 **Auto-Actualizador de Software:** Detección de versiones y actualización desatendida.\n- 🛠️ **NeoForge 21.1.247 & Java 21:** Soporte nativo para 479 mods de ATM 10.`,
       draft: false,
       prerelease: false
     })
