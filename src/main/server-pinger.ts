@@ -1,4 +1,7 @@
-import * as mcUtil from 'minecraft-server-util';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const mcUtil = require('minecraft-server-util');
 
 export interface ServerStatusResult {
   online: boolean;

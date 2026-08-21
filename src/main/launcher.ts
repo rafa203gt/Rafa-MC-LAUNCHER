@@ -1,9 +1,12 @@
-import path from 'path';
-import fs from 'fs';
-import { Client, Authenticator } from 'minecraft-launcher-core';
+import path from 'node:path';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { configStore, AppSettings } from './config-store';
 import { javaManager, DownloadProgress } from './java-manager';
 import { modSynchronizer } from './mod-sync';
+
+const require = createRequire(import.meta.url);
+const { Client, Authenticator } = require('minecraft-launcher-core');
 
 export interface LaunchOptions {
   username: string;
@@ -23,7 +26,7 @@ export interface ProgressEventPayload {
 }
 
 export class MinecraftLauncher {
-  private launcher: Client;
+  private launcher: any;
   private isLaunching = false;
 
   constructor() {
@@ -115,12 +118,10 @@ export class MinecraftLauncher {
       const customArgs: string[] = [...(settings.jvmArgs || [])];
       const shouldAutoConnect = options.autoConnect ?? settings.autoConnect;
       if (shouldAutoConnect && settings.serverIp) {
-        // Minecraft 1.20+ supports quickPlayMultiplayer flag
         customArgs.push('--quickPlayMultiplayer', `${settings.serverIp}:${settings.serverPort || 25565}`);
         onLog(`[Launcher] Auto-conexión habilitada a ${settings.serverIp}:${settings.serverPort || 25565}`);
       }
 
-      // Modloader configuration for Fabric / Forge
       let customVersion: any = {
         number: settings.minecraftVersion || '1.20.1',
         type: 'release'

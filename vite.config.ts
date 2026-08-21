@@ -16,18 +16,15 @@ export default defineConfig({
             rollupOptions: {
               external: [
                 'electron',
-                'minecraft-launcher-core',
-                'minecraft-server-util',
-                'adm-zip',
-                'axios',
-                'child_process',
-                'fs',
-                'path',
-                'crypto',
-                'os',
-                'https',
-                'http',
-                'net'
+                'node:child_process',
+                'node:fs',
+                'node:path',
+                'node:crypto',
+                'node:os',
+                'node:https',
+                'node:http',
+                'node:net',
+                'node:module'
               ]
             }
           }

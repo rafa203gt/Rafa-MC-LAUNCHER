@@ -1,9 +1,12 @@
-import path from 'path';
-import fs from 'fs';
-import https from 'https';
-import http from 'http';
-import AdmZip from 'adm-zip';
+import path from 'node:path';
+import fs from 'node:fs';
+import https from 'node:https';
+import http from 'node:http';
+import { createRequire } from 'node:module';
 import { configStore } from './config-store';
+
+const require = createRequire(import.meta.url);
+const AdmZip = require('adm-zip');
 
 export interface DownloadProgress {
   stage: string;
@@ -24,7 +27,6 @@ export class JavaManager {
     const java17Dir = path.join(this.runtimeDir, 'java17');
     if (!fs.existsSync(java17Dir)) return null;
 
-    // Search for javaw.exe or java executable recursively inside java17Dir
     const findJava = (dir: string): string | null => {
       const files = fs.readdirSync(dir);
       for (const file of files) {
