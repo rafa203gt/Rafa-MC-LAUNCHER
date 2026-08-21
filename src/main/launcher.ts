@@ -234,8 +234,25 @@ export class MinecraftLauncher {
       const minMemory = `${options.minRam || settings.minRam || 4096}M`;
       const maxMemory = `${options.maxRam || settings.maxRam || 8192}M`;
 
+      // Flags obligatorios de acceso a módulos de Java 17/21 para NeoForge, Forge y Fabric
+      const javaModuleArgs = [
+        '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.jar=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.util=ALL-UNNAMED',
+        '--add-opens=java.base/java.nio.file=ALL-UNNAMED',
+        '--add-opens=java.base/sun.security.util=ALL-UNNAMED',
+        '--add-opens=java.base/sun.security.x509=ALL-UNNAMED',
+        '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-exports=java.base/sun.security.util=ALL-UNNAMED',
+        '--add-exports=jdk.naming.dns/com.sun.jndi.dns=java.naming'
+      ];
+
       // JVM Arguments (solo flags para Java VM)
-      const customArgs: string[] = [...(settings.jvmArgs || [])];
+      const customArgs: string[] = [
+        ...javaModuleArgs,
+        ...(settings.jvmArgs || [])
+      ];
 
       // Quick-play / Direct connect (Argumento nativo de juego de Minecraft)
       const shouldAutoConnect = options.autoConnect ?? settings.autoConnect;
