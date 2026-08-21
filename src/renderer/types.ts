@@ -134,6 +134,8 @@ export interface LauncherAPI {
   deleteInstance: (instanceId: string) => Promise<boolean>;
   getRemoteConfig: () => Promise<RemoteLauncherConfig | null>;
   getNews: () => Promise<NewsAnnouncement[]>;
+  onRemoteConfig: (callback: (config: RemoteLauncherConfig) => void) => () => void;
+  onRemoteNews: (callback: (news: NewsAnnouncement[]) => void) => () => void;
   checkForUpdates: () => Promise<AppUpdateInfo>;
   downloadAppUpdate: (downloadUrl: string, fileName: string) => Promise<void>;
   onUpdateProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void;

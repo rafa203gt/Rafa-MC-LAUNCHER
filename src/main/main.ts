@@ -77,6 +77,9 @@ app.whenReady().then(() => {
   // Auto-cleanup any older executable versions in user directory
   appUpdater.cleanupOldVersions();
 
+  // Initialize Supabase Realtime live sync
+  remoteConfigManager.initRealtime(() => mainWindow);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

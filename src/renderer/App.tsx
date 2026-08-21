@@ -146,10 +146,30 @@ export const App: React.FC = () => {
       setProgress(null);
     });
 
+    const unbindRemoteConfig = window.launcherAPI.onRemoteConfig?.((remote) => {
+      console.log('[Renderer] ⚡ Configuración remota actualizada en vivo:', remote);
+      if (remote) {
+        setRemoteConfig(remote);
+        setSettings((prev) => ({
+          ...prev,
+          serverName: remote.server_name || prev.serverName,
+          serverIp: remote.server_ip || prev.serverIp,
+          serverPort: remote.server_port || prev.serverPort
+        }));
+      }
+    });
+
+    const unbindRemoteNews = window.launcherAPI.onRemoteNews?.((newsList) => {
+      console.log('[Renderer] 📰 Noticias remotas actualizadas:', newsList);
+      if (newsList) setNews(newsList);
+    });
+
     return () => {
       unbindProgress();
       unbindLog();
       unbindClosed();
+      if (unbindRemoteConfig) unbindRemoteConfig();
+      if (unbindRemoteNews) unbindRemoteNews();
     };
   }, []);
 

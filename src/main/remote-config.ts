@@ -1,5 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import axios from 'axios';
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { BrowserWindow } from 'electron';
 
 const SUPABASE_URL = 'https://wukhkwwstsfvqcnyqoqu.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -37,13 +37,85 @@ export interface NewsAnnouncement {
 
 export class RemoteConfigManager {
   private supabase: SupabaseClient;
+  private channel: RealtimeChannel | null = null;
   private cachedConfig: RemoteLauncherConfig | null = null;
   private cachedNews: NewsAnnouncement[] = [];
+  private getMainWindow: (() => BrowserWindow | null) | null = null;
 
   constructor() {
     this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: false }
     });
+  }
+
+  public initRealtime(getMainWindow: () => BrowserWindow | null): void {
+    this.getMainWindow = getMainWindow;
+
+    // 1. Initial fetch
+    this.fetchRemoteConfig().then((cfg) => {
+      if (cfg) this.broadcastConfig(cfg);
+    });
+    this.fetchNews().then((news) => {
+      this.broadcastNews(news);
+    });
+
+    // 2. Realtime WebSocket Listener
+    try {
+      this.channel = this.supabase
+        .channel('launcher-client-live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'launcher_config' },
+          (payload) => {
+            console.log('[RemoteConfig] ⚡ Cambio en vivo recibido de Supabase Realtime!');
+            if (payload.new) {
+              this.cachedConfig = payload.new as RemoteLauncherConfig;
+              this.broadcastConfig(this.cachedConfig);
+            } else {
+              this.fetchRemoteConfig().then((cfg) => {
+                if (cfg) this.broadcastConfig(cfg);
+              });
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'news_announcements' },
+          () => {
+            console.log('[RemoteConfig] 📰 Actualización de noticias recibida de Supabase!');
+            this.fetchNews().then((news) => {
+              this.broadcastNews(news);
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log(`[RemoteConfig] Estado de conexión Supabase Realtime: ${status}`);
+        });
+    } catch (err: any) {
+      console.warn(`[RemoteConfig] Error iniciando Realtime: ${err.message}`);
+    }
+
+    // 3. Fallback Periodic Polling every 10 seconds
+    setInterval(async () => {
+      const cfg = await this.fetchRemoteConfig();
+      if (cfg) this.broadcastConfig(cfg);
+      const news = await this.fetchNews();
+      this.broadcastNews(news);
+    }, 10000);
+  }
+
+  private broadcastConfig(config: RemoteLauncherConfig): void {
+    const win = this.getMainWindow?.();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('remote:config-updated', config);
+    }
+  }
+
+  private broadcastNews(news: NewsAnnouncement[]): void {
+    const win = this.getMainWindow?.();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('remote:news-updated', news);
+    }
   }
 
   public async fetchRemoteConfig(): Promise<RemoteLauncherConfig | null> {
@@ -55,17 +127,15 @@ export class RemoteConfigManager {
         .single();
 
       if (error) {
-        console.warn(`[RemoteConfig] Error de consulta en Supabase: ${error.message}`);
         return this.cachedConfig;
       }
 
       if (data) {
         this.cachedConfig = data as RemoteLauncherConfig;
-        console.log(`[RemoteConfig] ✅ Configuración remota sincronizada desde Supabase (${data.server_name} - ${data.server_ip})`);
         return this.cachedConfig;
       }
-    } catch (err: any) {
-      console.warn(`[RemoteConfig] No se pudo conectar con Supabase: ${err.message}`);
+    } catch {
+      // Fallback to cache silently
     }
     return this.cachedConfig;
   }
@@ -81,7 +151,6 @@ export class RemoteConfigManager {
         .limit(10);
 
       if (error) {
-        console.warn(`[RemoteConfig] Error obteniendo noticias de Supabase: ${error.message}`);
         return this.cachedNews;
       }
 
@@ -89,8 +158,8 @@ export class RemoteConfigManager {
         this.cachedNews = data as NewsAnnouncement[];
         return this.cachedNews;
       }
-    } catch (err: any) {
-      console.warn(`[RemoteConfig] No se pudieron obtener noticias remotas: ${err.message}`);
+    } catch {
+      // Fallback
     }
     return this.cachedNews;
   }
