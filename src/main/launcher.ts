@@ -255,6 +255,8 @@ export class MinecraftLauncher {
           '-Djava.net.preferIPv6Addresses=system',
           `-DignoreList=client-extra,${mcVersion}.jar,neoforge.jar`,
           `-DlibraryDirectory=${libDir}`,
+          '-Dneoforge.earlydisplay=false',
+          '-Dfml.earlyprogresswindow=false',
           '-p',
           moduleJars.join(separator),
           '--add-modules',
