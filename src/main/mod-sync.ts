@@ -13,15 +13,15 @@ const AdmZip = require('adm-zip');
 // High-performance HTTP/HTTPS Agents with Keep-Alive and Connection Pooling
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
+  maxSockets: 128,
+  maxFreeSockets: 64,
   timeout: 60000
 });
 
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 64,
-  maxFreeSockets: 32,
+  maxSockets: 128,
+  maxFreeSockets: 64,
   timeout: 60000
 });
 
@@ -53,11 +53,10 @@ export interface SyncProgress {
 }
 
 export class ModSynchronizer {
-  private instanceDir: string;
-  private concurrency = 16; // 16 parallel download streams
+  private concurrency = 32; // 32 simultaneous parallel download streams
 
-  constructor() {
-    this.instanceDir = configStore.getInstanceDir();
+  private getInstanceDir(): string {
+    return configStore.getInstanceDir();
   }
 
   public calculateSha1(filePath: string): string {
@@ -80,6 +79,48 @@ export class ModSynchronizer {
     }
   }
 
+  public async reinstallModpack(
+    manifestUrl: string,
+    onProgress?: (p: SyncProgress) => void
+  ): Promise<{ synced: number; deleted: number; total: number }> {
+    const instanceDir = this.getInstanceDir();
+
+    if (onProgress) {
+      onProgress({
+        stage: 'mods',
+        task: 'Limpiando archivos para reinstalación limpia (preservando mundos guardados)...',
+        total: 100,
+        current: 10,
+        percent: 10
+      });
+    }
+
+    // Folders to clean safely
+    const dirsToClean = ['mods', 'config', 'defaultconfigs', 'kubejs', 'local', 'versions', 'temp_chunks'];
+    for (const dirName of dirsToClean) {
+      const fullDir = path.join(instanceDir, dirName);
+      if (fs.existsSync(fullDir)) {
+        try {
+          fs.rmSync(fullDir, { recursive: true, force: true });
+        } catch (err) {
+          console.warn(`[ModSync] No se pudo limpiar carpeta ${dirName}:`, err);
+        }
+      }
+    }
+
+    if (onProgress) {
+      onProgress({
+        stage: 'mods',
+        task: 'Iniciando descarga completa de alta velocidad...',
+        total: 100,
+        current: 25,
+        percent: 25
+      });
+    }
+
+    return this.syncModpack(manifestUrl, onProgress);
+  }
+
   public async syncModpack(
     manifestUrl: string,
     onProgress?: (p: SyncProgress) => void
@@ -87,6 +128,8 @@ export class ModSynchronizer {
     if (!manifestUrl) {
       return { synced: 0, deleted: 0, total: 0 };
     }
+
+    const instanceDir = this.getInstanceDir();
 
     if (onProgress) {
       onProgress({
@@ -112,50 +155,33 @@ export class ModSynchronizer {
       return { synced: 0, deleted: 0, total: 0 };
     }
 
-    const modsDir = path.join(this.instanceDir, 'mods');
+    const modsDir = path.join(instanceDir, 'mods');
     if (!fs.existsSync(modsDir)) {
       fs.mkdirSync(modsDir, { recursive: true });
     }
 
     const localModFiles = fs.readdirSync(modsDir).filter((f) => f.endsWith('.jar'));
 
-    // 1. FAST INITIAL BOOTSTRAP: If local instance is fresh (<10 mods) and bundleUrl (.zip) is provided
+    // 1. TURBO MULTI-SEGMENT BOOTSTRAP: If local instance is fresh (<10 mods) and bundleUrl is provided
     if (localModFiles.length < 10 && manifest.bundleUrl) {
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: 'Iniciando descarga de alta velocidad del modpack completo...',
+          task: '⚡ Conectando al acelerador multi-segmento (8 hilos paralelos)...',
           total: 100,
           current: 0,
           percent: 0
         });
       }
 
-      const tempZip = path.join(this.instanceDir, 'temp_bundle.zip');
-      const startTime = Date.now();
+      const tempZip = path.join(instanceDir, 'temp_bundle.zip');
 
-      await this.downloadFileWithProgress(manifest.bundleUrl, tempZip, (loaded, total) => {
-        if (onProgress && total > 0) {
-          const percent = Math.min(100, Math.round((loaded / total) * 100));
-          const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
-          const speedMBs = loaded / 1024 / 1024 / elapsedSec;
-          const remainingBytes = Math.max(0, total - loaded);
-          const remainingSec = speedMBs > 0 ? Math.round(remainingBytes / 1024 / 1024 / speedMBs) : 0;
-
-          onProgress({
-            stage: 'mods',
-            task: `⚡ Descargando modpack (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB) - ${speedMBs.toFixed(1)} MB/s (${remainingSec}s restantes)`,
-            total,
-            current: loaded,
-            percent
-          });
-        }
-      });
+      await this.downloadMultiSegmentFile(manifest.bundleUrl, tempZip, onProgress);
 
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: 'Extrayendo modpack de alta velocidad...',
+          task: 'Extrayendo modpack y configuraciones...',
           total: 100,
           current: 100,
           percent: 100
@@ -163,7 +189,7 @@ export class ModSynchronizer {
       }
 
       const zip = new AdmZip(tempZip);
-      zip.extractAllTo(this.instanceDir, true);
+      zip.extractAllTo(instanceDir, true);
 
       try {
         fs.unlinkSync(tempZip);
@@ -172,7 +198,7 @@ export class ModSynchronizer {
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: '¡Modpack completo instalado con éxito!',
+          task: '¡Modpack instalado con éxito a máxima velocidad!',
           total: 100,
           current: 100,
           percent: 100
@@ -182,7 +208,7 @@ export class ModSynchronizer {
       return { synced: manifest.files?.length || 1, deleted: 0, total: manifest.files?.length || 1 };
     }
 
-    // 2. ULTRA-FAST PARALLEL INCREMENTAL SYNC
+    // 2. ULTRA-FAST 32-THREAD PARALLEL INCREMENTAL SYNC
     if (!manifest.files || !Array.isArray(manifest.files)) {
       return { synced: 0, deleted: 0, total: 0 };
     }
@@ -191,7 +217,7 @@ export class ModSynchronizer {
     const toDownload: ModpackFile[] = [];
 
     for (const file of remoteFiles) {
-      const localFilePath = path.join(this.instanceDir, file.path);
+      const localFilePath = path.join(instanceDir, file.path);
       if (!fs.existsSync(localFilePath)) {
         toDownload.push(file);
       } else {
@@ -208,13 +234,12 @@ export class ModSynchronizer {
     if (totalToDownload > 0) {
       console.log(`[ModSync] Descargando ${totalToDownload} archivos en paralelo (${this.concurrency} hilos)...`);
 
-      // Worker pool for parallel downloads
       let activeIndex = 0;
       const downloadWorker = async () => {
         while (activeIndex < toDownload.length) {
           const index = activeIndex++;
           const file = toDownload[index];
-          const targetPath = path.join(this.instanceDir, file.path);
+          const targetPath = path.join(instanceDir, file.path);
           const parentDir = path.dirname(targetPath);
 
           if (!fs.existsSync(parentDir)) {
@@ -287,6 +312,164 @@ export class ModSynchronizer {
     return { synced: downloadedCount, deleted: deletedCount, total: remoteFiles.length };
   }
 
+  /**
+   * Multi-segment parallel downloader: splits large file into chunks (Range: bytes)
+   * downloading simultaneously over multiple Keep-Alive TCP streams to saturate bandwidth.
+   */
+  private async downloadMultiSegmentFile(
+    url: string,
+    dest: string,
+    onProgress?: (p: SyncProgress) => void
+  ): Promise<void> {
+    const finalUrl = await this.resolveRedirects(url);
+
+    // 1. Get file size
+    const headRes = await axios.head(finalUrl, {
+      headers: { 'User-Agent': 'Rafa-MC-Launcher' },
+      timeout: 10000
+    });
+
+    const rawLength = headRes.headers['content-length'];
+    const totalBytes = typeof rawLength === 'number' ? rawLength : parseInt(String(rawLength || '0'), 10);
+    const acceptRanges = headRes.headers['accept-ranges'] === 'bytes' || totalBytes > 20 * 1024 * 1024;
+
+    // Fallback to single stream if server doesn't support ranges or file is small
+    if (!acceptRanges || totalBytes <= 0) {
+      return this.downloadFileWithProgress(finalUrl, dest, (loaded, total) => {
+        if (onProgress && total > 0) {
+          const percent = Math.min(100, Math.round((loaded / total) * 100));
+          onProgress({
+            stage: 'mods',
+            task: `⚡ Descargando modpack (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB)...`,
+            total,
+            current: loaded,
+            percent
+          });
+        }
+      });
+    }
+
+    const segmentsCount = Math.min(8, Math.max(4, Math.floor(totalBytes / (30 * 1024 * 1024))));
+    const chunkSize = Math.ceil(totalBytes / segmentsCount);
+    const tempDir = path.join(path.dirname(dest), 'temp_chunks');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    const chunkFiles: string[] = [];
+    const chunkProgress: number[] = new Array(segmentsCount).fill(0);
+    const startTime = Date.now();
+
+    const updateCombinedProgress = () => {
+      if (!onProgress) return;
+      const loaded = chunkProgress.reduce((a, b) => a + b, 0);
+      const percent = Math.min(100, Math.round((loaded / totalBytes) * 100));
+      const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
+      const speedMBs = loaded / 1024 / 1024 / elapsedSec;
+      const remainingBytes = Math.max(0, totalBytes - loaded);
+      const remainingSec = speedMBs > 0 ? Math.round(remainingBytes / 1024 / 1024 / speedMBs) : 0;
+
+      onProgress({
+        stage: 'mods',
+        task: `⚡ Descarga Acelerada (${segmentsCount} hilos): ${(loaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB — ${speedMBs.toFixed(1)} MB/s (${remainingSec}s restantes)`,
+        total: totalBytes,
+        current: loaded,
+        percent
+      });
+    };
+
+    const downloadSegment = (index: number): Promise<void> => {
+      const start = index * chunkSize;
+      const end = index === segmentsCount - 1 ? totalBytes - 1 : (index + 1) * chunkSize - 1;
+      const chunkPath = path.join(tempDir, `chunk_${index}.part`);
+      chunkFiles[index] = chunkPath;
+
+      return new Promise((resolve, reject) => {
+        const isHttps = finalUrl.startsWith('https');
+        const client = isHttps ? https : http;
+        const agent = isHttps ? httpsAgent : httpAgent;
+
+        const req = client.get(
+          finalUrl,
+          {
+            agent,
+            headers: {
+              'User-Agent': 'Rafa-MC-Launcher',
+              Range: `bytes=${start}-${end}`
+            }
+          },
+          (res) => {
+            if (res.statusCode !== 206 && res.statusCode !== 200) {
+              return reject(new Error(`Error descargando segmento ${index}: HTTP ${res.statusCode}`));
+            }
+
+            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 2 * 1024 * 1024 });
+
+            res.on('data', (chunk) => {
+              chunkProgress[index] += chunk.length;
+              updateCombinedProgress();
+            });
+
+            res.pipe(writeStream);
+
+            writeStream.on('finish', () => {
+              writeStream.close(() => resolve());
+            });
+
+            writeStream.on('error', (err) => {
+              fs.unlink(chunkPath, () => reject(err));
+            });
+          }
+        );
+
+        req.on('error', reject);
+      });
+    };
+
+    // Download all segments in parallel
+    await Promise.all(Array.from({ length: segmentsCount }, (_, i) => downloadSegment(i)));
+
+    // Assemble segments into final destination file
+    if (onProgress) {
+      onProgress({
+        stage: 'mods',
+        task: '⚡ Ensamblando bloques de datos en disco...',
+        total: totalBytes,
+        current: totalBytes,
+        percent: 99
+      });
+    }
+
+    const finalStream = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
+    for (const chunkPath of chunkFiles) {
+      if (fs.existsSync(chunkPath)) {
+        const data = fs.readFileSync(chunkPath);
+        finalStream.write(data);
+        try {
+          fs.unlinkSync(chunkPath);
+        } catch {}
+      }
+    }
+    finalStream.end();
+
+    try {
+      fs.rmdirSync(tempDir);
+    } catch {}
+  }
+
+  private resolveRedirects(url: string): Promise<string> {
+    return new Promise((resolve) => {
+      const client = url.startsWith('https') ? https : http;
+      client
+        .get(url, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            resolve(this.resolveRedirects(res.headers.location));
+          } else {
+            resolve(url);
+          }
+        })
+        .on('error', () => resolve(url));
+    });
+  }
+
   private downloadFile(url: string, dest: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const isHttps = url.startsWith('https');
@@ -303,7 +486,7 @@ export class ModSynchronizer {
             return reject(new Error(`Error descargando ${url}: HTTP ${res.statusCode}`));
           }
 
-          const file = fs.createWriteStream(dest, { highWaterMark: 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
           res.pipe(file);
 
           file.on('finish', () => {
@@ -344,7 +527,7 @@ export class ModSynchronizer {
 
           const total = parseInt(res.headers['content-length'] || '0', 10);
           let loaded = 0;
-          const file = fs.createWriteStream(dest, { highWaterMark: 1024 * 1024 });
+          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
 
           res.on('data', (chunk) => {
             loaded += chunk.length;
@@ -368,7 +551,7 @@ export class ModSynchronizer {
   }
 
   public getInstalledMods(): { name: string; size: number; modified: Date }[] {
-    const modsDir = path.join(this.instanceDir, 'mods');
+    const modsDir = path.join(this.getInstanceDir(), 'mods');
     if (!fs.existsSync(modsDir)) return [];
 
     const files = fs.readdirSync(modsDir);

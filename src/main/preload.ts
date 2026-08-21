@@ -12,8 +12,16 @@ export const API = {
   // Modpack & Server
   getServerStatus: () => ipcRenderer.invoke('server:status'),
   syncModpack: () => ipcRenderer.invoke('modpack:sync'),
+  reinstallModpack: () => ipcRenderer.invoke('modpack:reinstall'),
   getInstalledMods: () => ipcRenderer.invoke('modpack:installed-mods'),
   openFolder: (type: 'instance' | 'mods' | 'logs' | 'runtime') => ipcRenderer.invoke('system:open-folder', type),
+
+  // Instances Management
+  getInstances: () => ipcRenderer.invoke('instances:list'),
+  getActiveInstance: () => ipcRenderer.invoke('instances:active'),
+  switchInstance: (instanceId: string) => ipcRenderer.invoke('instances:switch', instanceId),
+  createInstance: (data: any) => ipcRenderer.invoke('instances:create', data),
+  deleteInstance: (instanceId: string) => ipcRenderer.invoke('instances:delete', instanceId),
 
   // Window Controls
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),

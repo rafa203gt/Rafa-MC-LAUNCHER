@@ -39,8 +39,14 @@ export class ConfigStore {
     return this.baseDir;
   }
 
+  private activeInstanceFolder: string = 'default';
+
+  public setActiveInstanceFolder(folder: string): void {
+    this.activeInstanceFolder = folder;
+  }
+
   public getInstanceDir(): string {
-    const dir = path.join(this.baseDir, 'instances', 'default');
+    const dir = path.join(this.baseDir, 'instances', this.activeInstanceFolder);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }

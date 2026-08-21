@@ -67,14 +67,39 @@ export interface UpdateDownloadProgress {
   total: number;
 }
 
+export interface MinecraftInstance {
+  id: string;
+  name: string;
+  description: string;
+  minecraftVersion: string;
+  modLoader: 'fabric' | 'forge' | 'neoforge' | 'vanilla';
+  modLoaderVersion: string;
+  modpackManifestUrl: string;
+  bannerUrl?: string;
+  icon?: string;
+  author?: string;
+  customRam?: number;
+  totalMods?: number;
+  isDefault?: boolean;
+  isActive?: boolean;
+  createdAt: string;
+  lastPlayed?: string;
+}
+
 export interface LauncherAPI {
   launchGame: (options: { username: string; minRam?: number; maxRam?: number; autoConnect?: boolean }) => Promise<void>;
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
   getServerStatus: () => Promise<ServerStatusResult>;
   syncModpack: () => Promise<{ synced: number; deleted: number; total: number }>;
+  reinstallModpack: () => Promise<{ synced: number; deleted: number; total: number }>;
   getInstalledMods: () => Promise<InstalledMod[]>;
   openFolder: (type: 'instance' | 'mods' | 'logs' | 'runtime') => Promise<boolean>;
+  getInstances: () => Promise<MinecraftInstance[]>;
+  getActiveInstance: () => Promise<MinecraftInstance>;
+  switchInstance: (instanceId: string) => Promise<MinecraftInstance>;
+  createInstance: (data: Partial<MinecraftInstance>) => Promise<MinecraftInstance>;
+  deleteInstance: (instanceId: string) => Promise<boolean>;
   checkForUpdates: () => Promise<AppUpdateInfo>;
   downloadAppUpdate: (downloadUrl: string, fileName: string) => Promise<void>;
   onUpdateProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void;

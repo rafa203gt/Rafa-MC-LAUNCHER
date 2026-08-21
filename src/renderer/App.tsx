@@ -4,12 +4,14 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { ServerBanner } from './components/ServerBanner';
 import { PlayControls } from './components/PlayControls';
 import { ModpackView } from './components/ModpackView';
+import { InstancesView } from './components/InstancesView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConsoleModal } from './components/ConsoleModal';
-import { AppSettings, ServerStatusResult, ProgressEventPayload } from './types';
+import { AppSettings, ServerStatusResult, ProgressEventPayload, MinecraftInstance } from './types';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'play' | 'mods' | 'settings' | 'console'>('play');
+  const [activeTab, setActiveTab] = useState<'play' | 'instances' | 'mods' | 'settings' | 'console'>('play');
+  const [activeInstance, setActiveInstance] = useState<MinecraftInstance | null>(null);
   const [settings, setSettings] = useState<AppSettings>({
     username: 'Jugador',
     minRam: 2048,
@@ -20,9 +22,9 @@ export const App: React.FC = () => {
     serverIp: 'play.tuserver.com',
     serverPort: 25565,
     serverName: 'Rafa Server',
-    minecraftVersion: '1.20.1',
-    modLoader: 'fabric',
-    modLoaderVersion: '0.15.11',
+    minecraftVersion: '1.21.1',
+    modLoader: 'neoforge',
+    modLoaderVersion: '21.1.247',
     modpackManifestUrl: 'https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json',
     fullscreen: false,
     width: 1280,
@@ -37,7 +39,7 @@ export const App: React.FC = () => {
   const [progress, setProgress] = useState<ProgressEventPayload | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
-  // Load initial settings
+  // Load initial settings & active instance
   useEffect(() => {
     if (window.launcherAPI?.getSettings) {
       window.launcherAPI.getSettings().then((loaded) => {
@@ -45,6 +47,12 @@ export const App: React.FC = () => {
           setSettings(loaded);
           setUsername(loaded.username || 'Jugador');
         }
+      });
+    }
+
+    if (window.launcherAPI?.getActiveInstance) {
+      window.launcherAPI.getActiveInstance().then((inst) => {
+        if (inst) setActiveInstance(inst);
       });
     }
   }, []);
@@ -142,6 +150,7 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         statusText={isLaunching ? 'Lanzando juego...' : 'Listo'}
+        activeInstanceName={activeInstance?.name}
       />
 
       {/* App Auto-Update Notification */}
@@ -170,6 +179,26 @@ export const App: React.FC = () => {
               onLaunch={handleLaunch}
             />
           </div>
+        )}
+
+        {activeTab === 'instances' && (
+          <InstancesView
+            onInstanceActivated={(inst) => {
+              setActiveInstance(inst);
+              setSettings((prev) => ({
+                ...prev,
+                minecraftVersion: inst.minecraftVersion,
+                modLoader: inst.modLoader,
+                modLoaderVersion: inst.modLoaderVersion,
+                modpackManifestUrl: inst.modpackManifestUrl,
+                maxRam: inst.customRam || prev.maxRam
+              }));
+            }}
+            onLaunchInstance={() => {
+              setActiveTab('play');
+              handleLaunch();
+            }}
+          />
         )}
 
         {activeTab === 'mods' && <ModpackView />}

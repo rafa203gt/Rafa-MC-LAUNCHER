@@ -8,6 +8,7 @@ import { modSynchronizer } from './mod-sync';
 import { serverPinger } from './server-pinger';
 import { minecraftLauncher } from './launcher';
 import { appUpdater } from './app-updater';
+import { instanceManager } from './instance-manager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,7 +86,6 @@ ipcMain.handle('server:status', async () => {
   return serverPinger.pingServer(settings.serverIp, settings.serverPort);
 });
 
-// 3. Modpack Sync & Mods List
 ipcMain.handle('modpack:sync', async () => {
   const settings = configStore.getSettings();
   return modSynchronizer.syncModpack(settings.modpackManifestUrl, (progress) => {
@@ -95,8 +95,38 @@ ipcMain.handle('modpack:sync', async () => {
   });
 });
 
+ipcMain.handle('modpack:reinstall', async () => {
+  const settings = configStore.getSettings();
+  return modSynchronizer.reinstallModpack(settings.modpackManifestUrl, (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('launcher:progress', progress);
+    }
+  });
+});
+
 ipcMain.handle('modpack:installed-mods', async () => {
   return modSynchronizer.getInstalledMods();
+});
+
+// 4. Instance Manager IPC Handlers
+ipcMain.handle('instances:list', async () => {
+  return instanceManager.getInstances();
+});
+
+ipcMain.handle('instances:active', async () => {
+  return instanceManager.getActiveInstance();
+});
+
+ipcMain.handle('instances:switch', async (_event, instanceId: string) => {
+  return instanceManager.setActiveInstance(instanceId);
+});
+
+ipcMain.handle('instances:create', async (_event, data: any) => {
+  return instanceManager.createInstance(data);
+});
+
+ipcMain.handle('instances:delete', async (_event, instanceId: string) => {
+  return instanceManager.deleteInstance(instanceId);
 });
 
 // 4. Launcher execution

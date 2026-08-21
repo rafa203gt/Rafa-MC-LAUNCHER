@@ -45,6 +45,25 @@ export const ModpackView: React.FC = () => {
     }
   };
 
+  const handleReinstall = async () => {
+    if (!confirm('¿Deseas reinstalar el modpack desde cero? Esto reparará cualquier mod corrupto o faltante. Tus mundos guardados NO se borrarán.')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setSyncStatus('Reinstalando modpack desde la nube (descarga acelerada)...');
+    try {
+      const res = await window.launcherAPI?.reinstallModpack();
+      setSyncStatus(`¡Reinstalación completada! ${res?.synced ?? 0} archivos restaurados.`);
+      await fetchMods();
+    } catch (e: any) {
+      setSyncStatus(`Error en la reinstalación: ${e.message}`);
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setSyncStatus(null), 7000);
+    }
+  };
+
   const filteredMods = mods.filter((m) =>
     m.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -63,19 +82,29 @@ export const ModpackView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <button
             onClick={handleOpenFolder}
-            className="flex items-center gap-2 px-4 py-2 bg-mc-darker hover:bg-slate-800 border border-mc-border rounded-xl text-xs font-semibold text-slate-200 transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-mc-darker hover:bg-slate-800 border border-mc-border rounded-xl text-xs font-semibold text-slate-200 transition-all"
           >
             <FolderOpen className="w-4 h-4 text-amber-400" />
             Abrir Carpeta
           </button>
 
           <button
+            onClick={handleReinstall}
+            disabled={isLoading}
+            title="Reparar y reinstalar todo el modpack desde cero"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 text-amber-400 ${isLoading ? 'animate-spin' : ''}`} />
+            Reinstalar / Reparar
+          </button>
+
+          <button
             onClick={handleSync}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             Sincronizar

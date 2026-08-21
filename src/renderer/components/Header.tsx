@@ -1,13 +1,14 @@
 import React from 'react';
-import { Minus, Square, X, Gamepad2, Settings, Box, Terminal, RefreshCw } from 'lucide-react';
+import { Minus, Square, X, Gamepad2, Settings, Box, Terminal, Layers } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'play' | 'mods' | 'settings' | 'console';
-  setActiveTab: (tab: 'play' | 'mods' | 'settings' | 'console') => void;
+  activeTab: 'play' | 'instances' | 'mods' | 'settings' | 'console';
+  setActiveTab: (tab: 'play' | 'instances' | 'mods' | 'settings' | 'console') => void;
   statusText: string;
+  activeInstanceName?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusText }) => {
+export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusText, activeInstanceName }) => {
   const handleMinimize = () => {
     window.launcherAPI?.minimizeWindow();
   };
@@ -29,7 +30,9 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusT
         </div>
         <div>
           <h1 className="font-bold text-sm tracking-wider text-slate-100 uppercase">Rafa Launcher</h1>
-          <span className="text-[10px] text-emerald-400 font-medium tracking-tight">v1.21.1 NeoForge • ATM10</span>
+          <span className="text-[10px] text-emerald-400 font-medium tracking-tight">
+            {activeInstanceName || 'All the Mods 10 (ATM10)'}
+          </span>
         </div>
       </div>
 
@@ -37,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusT
       <nav className="flex items-center gap-1 titlebar-no-drag bg-mc-darker/60 p-1 rounded-xl border border-mc-border/50">
         <button
           onClick={() => setActiveTab('play')}
-          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             activeTab === 'play'
               ? 'bg-emerald-500 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-mc-card'
@@ -48,8 +51,20 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusT
         </button>
 
         <button
+          onClick={() => setActiveTab('instances')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            activeTab === 'instances'
+              ? 'bg-emerald-500 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-mc-card'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-cyan-400" />
+          Instancias
+        </button>
+
+        <button
           onClick={() => setActiveTab('mods')}
-          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             activeTab === 'mods'
               ? 'bg-emerald-500 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-mc-card'
