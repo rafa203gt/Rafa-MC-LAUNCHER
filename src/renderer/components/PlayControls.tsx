@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, User, Loader2, CheckCircle2, AlertTriangle, ShieldCheck, Cpu, Layers, Box, Sparkles, ChevronDown } from 'lucide-react';
+import { Play, User, Loader2, CheckCircle2, AlertTriangle, ShieldCheck, Cpu, Layers, Box, Sparkles, ChevronDown, Flame } from 'lucide-react';
 import { ProgressEventPayload, MinecraftInstance } from '../types';
-import atm10Logo from '../assets/atm10.png';
 
 interface PlayControlsProps {
   username: string;
@@ -79,9 +78,9 @@ export const PlayControls: React.FC<PlayControlsProps> = ({
         <div className="lg:col-span-7 bg-mc-darker/80 border border-mc-border/80 rounded-2xl p-4 relative shadow-md">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-slate-900 border border-mc-border flex items-center justify-center shrink-0 overflow-hidden">
+              <div className="w-11 h-11 rounded-xl bg-slate-900 border border-mc-border flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
                 {isAtm10 ? (
-                  <img src={atm10Logo} alt="ATM10" className="w-8 h-8 object-contain" />
+                  <Flame className="w-6 h-6 text-amber-400 animate-pulse" />
                 ) : isVanilla ? (
                   <Box className="w-6 h-6 text-emerald-400" />
                 ) : (

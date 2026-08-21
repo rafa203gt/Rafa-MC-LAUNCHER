@@ -178,6 +178,20 @@ rafa-mc-launcher/
 
 ---
 
+---
+
+## ⚖️ Aviso Legal y Descargo de Responsabilidad (Copyright & Trademarks)
+
+> **⚠️ NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**  
+> **⚠️ NO ES UN PRODUCTO OFICIAL DE MINECRAFT. NO ESTÁ APROBADO NI ASOCIADO CON MOJANG STUDIOS NI MICROSOFT.**
+
+- **Minecraft** es una marca comercial y propiedad registrada de **Mojang Synergies AB / Microsoft Corporation**.
+- Este software es un lanzador cliente independiente desarrollado por la comunidad bajo licencia de código abierto con fines educativos y de conectividad para servidores privados.
+- Este lanzador **no distribuye ni aloja contenido protegido por derechos de autor**, binarios propietarios de Minecraft ni assets comerciales en su código fuente. Todas las librerías oficiales de Mojang, texturas, sonidos y runtimes de Java se descargan en tiempo de ejecución de manera legal directamente desde las APIs y servidores oficiales de distribución de Mojang Studios y Eclipse Adoptium.
+- Todos los nombres de modpacks, mods, marcas comerciales y logotipos mencionados en este proyecto pertenecen a sus respectivos autores y creadores.
+
+---
+
 ## 📄 Licencia
 
 Este proyecto está bajo la Licencia **MIT** — consulta el archivo [LICENSE](LICENSE) para más detalles.

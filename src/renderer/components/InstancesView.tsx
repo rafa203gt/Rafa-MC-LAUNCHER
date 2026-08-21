@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu, Box } from 'lucide-react';
+import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu, Box, Flame } from 'lucide-react';
 import { MinecraftInstance } from '../types';
 import { CreateInstanceModal } from './CreateInstanceModal';
-import atm10Logo from '../assets/atm10.png';
 
 interface InstancesViewProps {
   onInstanceActivated: (instance: MinecraftInstance) => void;
@@ -133,13 +132,14 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
                 {/* Banner / Header Image */}
                 <div className="h-32 relative bg-gradient-to-r from-emerald-950/70 via-slate-900 to-teal-950/70 flex items-center justify-center overflow-hidden border-b border-mc-border/50">
                   {inst.id === 'atm10' ? (
-                    <div className="relative w-full h-full flex items-center justify-center p-3">
+                    <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-r from-amber-950/40 via-slate-900 to-rose-950/40 p-3 overflow-hidden">
                       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent" />
-                      <img
-                        src={atm10Logo}
-                        alt="All The Mods 10"
-                        className="h-20 w-auto object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)] group-hover:scale-110 transition-transform duration-500"
-                      />
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 group-hover:scale-110 group-hover:border-amber-400/50 transition-all duration-300 shadow-lg">
+                        <Flame className="w-8 h-8 stroke-[2.2] animate-pulse" />
+                      </div>
+                      <span className="text-[11px] font-bold text-amber-300 font-mono tracking-wider mt-1.5 uppercase">
+                        All The Mods 10
+                      </span>
                     </div>
                   ) : inst.modLoader === 'vanilla' ? (
                     <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-emerald-900/40 via-slate-900 to-amber-950/30 p-3">
