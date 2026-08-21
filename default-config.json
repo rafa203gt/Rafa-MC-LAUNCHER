@@ -6,7 +6,7 @@
   "minecraftVersion": "1.21.1",
   "modLoader": "neoforge",
   "modLoaderVersion": "21.1.247",
-  "modpackManifestUrl": "",
+  "modpackManifestUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json",
   "newsFeedUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/news.json",
   "java": {
     "autoDownload": true,

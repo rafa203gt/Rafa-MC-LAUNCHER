@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "build:win": "tsc && vite build && electron-builder --win",
     "test": "vitest run --config ./vitest.config.ts",
-    "pack-builder": "node scripts/build-manifest.js"
+    "pack-builder": "node scripts/build-manifest.js",
+    "publish-pack": "node scripts/publish-modpack.js"
   },
   "keywords": [
     "minecraft",

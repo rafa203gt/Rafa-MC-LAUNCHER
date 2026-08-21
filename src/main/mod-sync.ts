@@ -4,10 +4,14 @@ import crypto from 'node:crypto';
 import https from 'node:https';
 import http from 'node:http';
 import axios from 'axios';
+import { createRequire } from 'node:module';
 import { configStore } from './config-store';
 
+const require = createRequire(import.meta.url);
+const AdmZip = require('adm-zip');
+
 export interface ModpackFile {
-  path: string;
+  path: string; // Relative to instance root (e.g. 'mods/mekanism.jar', 'config/forge.cfg')
   sha1: string;
   size?: number;
   downloadUrl: string;
@@ -19,6 +23,9 @@ export interface ModpackManifest {
   minecraftVersion: string;
   modLoader: 'fabric' | 'forge' | 'neoforge' | 'vanilla';
   modLoaderVersion: string;
+  updatedAt?: string;
+  bundleUrl?: string; // Optional direct URL to full .zip package for fast 1-click initial install
+  bundleSha1?: string;
   files: ModpackFile[];
 }
 
@@ -44,14 +51,15 @@ export class ModSynchronizer {
   }
 
   public async fetchManifest(manifestUrl: string): Promise<ModpackManifest | null> {
+    if (!manifestUrl || manifestUrl.trim() === '') return null;
     try {
       const response = await axios.get<ModpackManifest>(manifestUrl, {
         timeout: 10000,
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'Rafa-MC-Launcher' }
       });
       return response.data;
     } catch (err: any) {
-      console.warn(`[ModSync] No se pudo obtener el manifiesto de ${manifestUrl}:`, err.message);
+      console.warn(`[ModSync] No se pudo obtener el manifiesto remoto (${manifestUrl}):`, err.message);
       return null;
     }
   }
@@ -67,7 +75,7 @@ export class ModSynchronizer {
     if (onProgress) {
       onProgress({
         stage: 'mods',
-        task: 'Comprobando actualizaciones del modpack...',
+        task: 'Verificando actualizaciones del modpack en la nube...',
         total: 100,
         current: 0,
         percent: 0
@@ -75,11 +83,11 @@ export class ModSynchronizer {
     }
 
     const manifest = await this.fetchManifest(manifestUrl);
-    if (!manifest || !manifest.files || !Array.isArray(manifest.files)) {
+    if (!manifest) {
       if (onProgress) {
         onProgress({
           stage: 'mods',
-          task: 'Modpack verificado (sin cambios remotos)',
+          task: 'Modpack verificado (sin conexión a servidor de actualizaciones)',
           total: 100,
           current: 100,
           percent: 100
@@ -93,10 +101,72 @@ export class ModSynchronizer {
       fs.mkdirSync(modsDir, { recursive: true });
     }
 
+    const localModFiles = fs.readdirSync(modsDir).filter((f) => f.endsWith('.jar'));
+
+    // 1. FAST BOOTSTRAP: If local instance is fresh/empty and manifest provides a bundleUrl (.zip)
+    if (localModFiles.length < 10 && manifest.bundleUrl) {
+      if (onProgress) {
+        onProgress({
+          stage: 'mods',
+          task: 'Descargando paquete completo del modpack...',
+          total: 100,
+          current: 0,
+          percent: 0
+        });
+      }
+
+      const tempZip = path.join(this.instanceDir, 'temp_bundle.zip');
+      await this.downloadFileWithProgress(manifest.bundleUrl, tempZip, (loaded, total) => {
+        if (onProgress && total > 0) {
+          const percent = Math.min(100, Math.round((loaded / total) * 100));
+          onProgress({
+            stage: 'mods',
+            task: `Descargando modpack completo (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB)...`,
+            total,
+            current: loaded,
+            percent
+          });
+        }
+      });
+
+      if (onProgress) {
+        onProgress({
+          stage: 'mods',
+          task: 'Extrayendo modpack y configuraciones...',
+          total: 100,
+          current: 100,
+          percent: 100
+        });
+      }
+
+      const zip = new AdmZip(tempZip);
+      zip.extractAllTo(this.instanceDir, true);
+
+      try {
+        fs.unlinkSync(tempZip);
+      } catch {}
+
+      if (onProgress) {
+        onProgress({
+          stage: 'mods',
+          task: '¡Modpack completo instalado con éxito!',
+          total: 100,
+          current: 100,
+          percent: 100
+        });
+      }
+
+      return { synced: manifest.files?.length || 1, deleted: 0, total: manifest.files?.length || 1 };
+    }
+
+    // 2. INCREMENTAL DIFFERENTIAL SYNC
+    if (!manifest.files || !Array.isArray(manifest.files)) {
+      return { synced: 0, deleted: 0, total: 0 };
+    }
+
     const remoteFiles = manifest.files;
     const toDownload: ModpackFile[] = [];
 
-    // 1. Check which files need download
     for (const file of remoteFiles) {
       const localFilePath = path.join(this.instanceDir, file.path);
       if (!fs.existsSync(localFilePath)) {
@@ -109,7 +179,6 @@ export class ModSynchronizer {
       }
     }
 
-    // 2. Download missing/updated files
     let downloadedCount = 0;
     const totalToDownload = toDownload.length;
 
@@ -126,7 +195,7 @@ export class ModSynchronizer {
         const percent = Math.round(((i + 1) / totalToDownload) * 100);
         onProgress({
           stage: 'mods',
-          task: `Descargando mods (${i + 1}/${totalToDownload}): ${path.basename(file.path)}`,
+          task: `Actualizando archivos (${i + 1}/${totalToDownload}): ${path.basename(file.path)}`,
           total: totalToDownload,
           current: i + 1,
           percent
@@ -137,24 +206,25 @@ export class ModSynchronizer {
       downloadedCount++;
     }
 
-    // 3. Clean up deleted mods in mods/ folder
+    // 3. CLEAN UP DEPRECATED MODS
     let deletedCount = 0;
     if (fs.existsSync(modsDir)) {
-      const localMods = fs.readdirSync(modsDir);
+      const currentMods = fs.readdirSync(modsDir);
       const remoteModNames = new Set(
         remoteFiles
           .filter((f) => f.path.startsWith('mods/'))
           .map((f) => path.basename(f.path))
       );
 
-      for (const modFile of localMods) {
-        if (modFile.endsWith('.jar') || modFile.endsWith('.disabled')) {
+      for (const modFile of currentMods) {
+        if (modFile.endsWith('.jar')) {
           if (!remoteModNames.has(modFile) && remoteFiles.length > 0) {
             try {
               fs.unlinkSync(path.join(modsDir, modFile));
               deletedCount++;
+              console.log(`[ModSync] Eliminado mod obsoleto: ${modFile}`);
             } catch (err) {
-              console.warn(`[ModSync] No se pudo eliminar: ${modFile}`, err);
+              console.warn(`[ModSync] No se pudo eliminar mod obsoleto: ${modFile}`, err);
             }
           }
         }
@@ -162,9 +232,13 @@ export class ModSynchronizer {
     }
 
     if (onProgress) {
+      const msg =
+        downloadedCount > 0 || deletedCount > 0
+          ? `Modpack sincronizado: ${downloadedCount} actualizados, ${deletedCount} eliminados`
+          : 'Modpack al día con la última versión del servidor';
       onProgress({
         stage: 'mods',
-        task: `Modpack sincronizado correctamente (${downloadedCount} descargados, ${deletedCount} limpiados)`,
+        task: msg,
         total: 100,
         current: 100,
         percent: 100
@@ -184,10 +258,54 @@ export class ModSynchronizer {
           }
 
           if (res.statusCode !== 200) {
-            return reject(new Error(`Error descargando archivo ${url}: HTTP ${res.statusCode}`));
+            return reject(new Error(`Error descargando ${url}: HTTP ${res.statusCode}`));
           }
 
           const file = fs.createWriteStream(dest);
+          res.pipe(file);
+
+          file.on('finish', () => {
+            file.close(() => resolve());
+          });
+
+          file.on('error', (err) => {
+            fs.unlink(dest, () => reject(err));
+          });
+        })
+        .on('error', (err) => {
+          reject(err);
+        });
+    });
+  }
+
+  private downloadFileWithProgress(
+    url: string,
+    dest: string,
+    onProgress: (loaded: number, total: number) => void
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const client = url.startsWith('https') ? https : http;
+      client
+        .get(url, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            return this.downloadFileWithProgress(res.headers.location, dest, onProgress)
+              .then(resolve)
+              .catch(reject);
+          }
+
+          if (res.statusCode !== 200) {
+            return reject(new Error(`Error descargando bundle ${url}: HTTP ${res.statusCode}`));
+          }
+
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let loaded = 0;
+          const file = fs.createWriteStream(dest);
+
+          res.on('data', (chunk) => {
+            loaded += chunk.length;
+            onProgress(loaded, total);
+          });
+
           res.pipe(file);
 
           file.on('finish', () => {

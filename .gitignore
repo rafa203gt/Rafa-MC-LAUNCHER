@@ -31,4 +31,6 @@ release
 
 # Modpack builder local test files
 modpack/mods/*.jar
+modpack/*.zip
+modpack/*.rar
 !modpack/mods/.gitkeep
