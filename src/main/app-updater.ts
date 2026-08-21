@@ -133,8 +133,6 @@ export class AppUpdater {
         }
       });
 
-      console.log(`[AppUpdater] Actualización descargada. Iniciando auto-reemplazo desatendido...`);
-
       const currentExecPath = process.execPath;
       const pid = process.pid;
 
@@ -142,55 +140,50 @@ export class AppUpdater {
         const isInstaller = fileName.toLowerCase().includes('setup');
 
         if (isInstaller) {
-          // If it is NSIS Setup installer, run with silent /S or normal flag and quit
-          const child = spawn(targetDownloadedPath, ['/S'], {
+          // If it is NSIS Setup installer, run directly and quit
+          const child = spawn(targetDownloadedPath, [], {
             detached: true,
             stdio: 'ignore'
           });
           child.unref();
         } else {
-          // Hot-swap replacement batch script for portable .exe
-          const scriptPath = path.join(tempDir, `hotswap_updater_${Date.now()}.cmd`);
-          const batContent = `
-@echo off
-setlocal
-chcp 65001 >nul
-title Actualizando Rafa MC Launcher...
+          // Clean, completely invisible PowerShell updater (zero black console windows/tabs)
+          const psCommand = `
+            $oldPid = ${pid};
+            $newExe = '${targetDownloadedPath.replace(/'/g, "''")}';
+            $currExe = '${currentExecPath.replace(/'/g, "''")}';
+            
+            try {
+              $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue;
+              if ($proc) {
+                $proc.WaitForExit(5000);
+              }
+            } catch {}
+            
+            Start-Sleep -Milliseconds 800;
+            
+            for ($i = 0; $i -lt 10; $i++) {
+              try {
+                Copy-Item -Path $newExe -Destination $currExe -Force -ErrorAction Stop;
+                Remove-Item -Path $newExe -Force -ErrorAction SilentlyContinue;
+                break;
+              } catch {
+                Start-Sleep -Milliseconds 500;
+              }
+            }
+            
+            Start-Process -FilePath $currExe;
+          `.trim().replace(/\r?\n\s*/g, ' ');
 
-echo ========================================================
-echo Actualizando ejecutable a la nueva version...
-echo ========================================================
-
-set OLD_PID=${pid}
-set NEW_EXE=${targetDownloadedPath}
-set CURRENT_EXE=${currentExecPath}
-
-:wait_loop
-tasklist /fi "PID eq %OLD_PID%" 2>nul | find "%OLD_PID%" >nul
-if not errorlevel 1 (
-    timeout /t 1 /nobreak >nul
-    goto wait_loop
-)
-
-timeout /t 1 /nobreak >nul
-copy /y "%NEW_EXE%" "%CURRENT_EXE%" >nul
-if errorlevel 1 (
-    copy /y "%NEW_EXE%" "%CURRENT_EXE%" >nul
-)
-
-del "%NEW_EXE%" >nul 2>&1
-start "" "%CURRENT_EXE%"
-
-del "%~f0" >nul 2>&1
-exit
-`;
-          fs.writeFileSync(scriptPath, batContent.trim(), 'utf-8');
-
-          const helper = spawn('cmd.exe', ['/c', scriptPath], {
-            detached: true,
-            stdio: 'ignore',
-            windowsHide: true
-          });
+          const helper = spawn(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psCommand],
+            {
+              detached: true,
+              stdio: 'ignore',
+              windowsHide: true
+            }
+          );
           helper.unref();
         }
       } else {
@@ -199,7 +192,8 @@ exit
 
       // Exit immediately so old process releases the file lock
       setTimeout(() => {
-        app.exit(0);
+        app.quit();
+        setTimeout(() => app.exit(0), 300);
       }, 500);
     } catch (err: any) {
       this.isDownloading = false;
