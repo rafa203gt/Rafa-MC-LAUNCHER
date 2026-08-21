@@ -18,7 +18,7 @@ export const App: React.FC = () => {
     maxRam: 4096,
     customJavaPath: '',
     autoJava: true,
-    autoConnect: true,
+    autoConnect: false,
     serverIp: 'play.tuserver.com',
     serverPort: 25565,
     serverName: 'Rafa Server',

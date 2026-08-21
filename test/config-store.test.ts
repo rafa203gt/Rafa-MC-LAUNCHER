@@ -30,7 +30,7 @@ describe('ConfigStore Unit Tests', () => {
     expect(settings.minRam).toBeGreaterThanOrEqual(1024);
     expect(settings.maxRam).toBeGreaterThanOrEqual(2048);
     expect(settings.autoJava).toBe(true);
-    expect(settings.autoConnect).toBe(true);
+    expect(settings.autoConnect).toBe(false);
   });
 
   it('debe guardar y persistir cambios de configuración', () => {

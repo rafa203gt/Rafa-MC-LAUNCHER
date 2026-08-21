@@ -2,7 +2,7 @@
   "serverName": "All the Mods 10 (ATM10)",
   "serverIp": "play.tuserver.com",
   "serverPort": 25565,
-  "autoConnect": true,
+  "autoConnect": false,
   "minecraftVersion": "1.21.1",
   "modLoader": "neoforge",
   "modLoaderVersion": "21.1.247",
