@@ -234,11 +234,17 @@ export class MinecraftLauncher {
       const minMemory = `${options.minRam || settings.minRam || 4096}M`;
       const maxMemory = `${options.maxRam || settings.maxRam || 8192}M`;
 
-      // Quick-play / Direct connect arguments
+      // JVM Arguments (solo flags para Java VM)
       const customArgs: string[] = [...(settings.jvmArgs || [])];
+
+      // Quick-play / Direct connect (Argumento nativo de juego de Minecraft)
       const shouldAutoConnect = options.autoConnect ?? settings.autoConnect;
+      let quickPlayOption: any = null;
       if (shouldAutoConnect && settings.serverIp) {
-        customArgs.push('--quickPlayMultiplayer', `${settings.serverIp}:${settings.serverPort || 25565}`);
+        quickPlayOption = {
+          type: 'multiplayer',
+          identifier: `${settings.serverIp}:${settings.serverPort || 25565}`
+        };
         onLog(`[Launcher] Auto-conexión habilitada a ${settings.serverIp}:${settings.serverPort || 25565}`);
       }
 
@@ -257,7 +263,8 @@ export class MinecraftLauncher {
           width: settings.width || 1280,
           height: settings.height || 720
         },
-        customArgs: customArgs
+        customArgs: customArgs,
+        quickPlay: quickPlayOption
       };
 
       // Hook MCLC events
