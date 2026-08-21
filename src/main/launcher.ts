@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import axios from 'axios';
 import { createRequire } from 'node:module';
 import { configStore, AppSettings } from './config-store';
 import { javaManager, DownloadProgress } from './java-manager';
@@ -35,6 +36,43 @@ export class MinecraftLauncher {
 
   public getIsLaunching(): boolean {
     return this.isLaunching;
+  }
+
+  private async ensureFabricVersionJson(
+    instanceDir: string,
+    mcVersion: string,
+    loaderVersion = '0.15.11',
+    onLog?: (line: string) => void
+  ): Promise<void> {
+    const versionsDir = path.join(instanceDir, 'versions', 'fabric');
+    const versionJsonPath = path.join(versionsDir, 'fabric.json');
+
+    if (fs.existsSync(versionJsonPath)) {
+      return;
+    }
+
+    if (!fs.existsSync(versionsDir)) {
+      fs.mkdirSync(versionsDir, { recursive: true });
+    }
+
+    if (onLog) {
+      onLog(`[Launcher] Descargando perfil de Fabric Loader ${loaderVersion} para Minecraft ${mcVersion}...`);
+    }
+
+    const url = `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/json`;
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: { 'User-Agent': 'Rafa-MC-Launcher' }
+    });
+
+    const profileJson = response.data;
+    profileJson.id = 'fabric';
+
+    fs.writeFileSync(versionJsonPath, JSON.stringify(profileJson, null, 2), 'utf-8');
+
+    if (onLog) {
+      onLog(`[Launcher] Perfil de Fabric guardado correctamente en ${versionJsonPath}`);
+    }
   }
 
   public async launch(
@@ -98,14 +136,35 @@ export class MinecraftLauncher {
         });
       }
 
-      // 3. MINECRAFT ASSETS & LIBRARIES DOWNLOAD (MCLC)
+      // 3. MINECRAFT & LOADER PREPARATION
       onProgress({
         stage: 'assets',
-        task: 'Preparando descarga de Minecraft 1.20.1 y librerías...',
+        task: 'Preparando descarga de Minecraft 1.20.1 y dependencias...',
         total: 100,
         current: 0,
         percent: 0
       });
+
+      const mcVersion = settings.minecraftVersion || '1.20.1';
+      let customVersion: any = {
+        number: mcVersion,
+        type: 'release'
+      };
+
+      if (settings.modLoader === 'fabric') {
+        await this.ensureFabricVersionJson(
+          instanceDir,
+          mcVersion,
+          settings.modLoaderVersion || '0.15.11',
+          onLog
+        );
+
+        customVersion = {
+          number: mcVersion,
+          type: 'release',
+          custom: 'fabric'
+        };
+      }
 
       // Non-Premium offline authentication
       const cleanUsername = (options.username || settings.username || 'Jugador').trim();
@@ -120,19 +179,6 @@ export class MinecraftLauncher {
       if (shouldAutoConnect && settings.serverIp) {
         customArgs.push('--quickPlayMultiplayer', `${settings.serverIp}:${settings.serverPort || 25565}`);
         onLog(`[Launcher] Auto-conexión habilitada a ${settings.serverIp}:${settings.serverPort || 25565}`);
-      }
-
-      let customVersion: any = {
-        number: settings.minecraftVersion || '1.20.1',
-        type: 'release'
-      };
-
-      if (settings.modLoader === 'fabric') {
-        customVersion = {
-          number: settings.minecraftVersion || '1.20.1',
-          type: 'release',
-          custom: 'fabric'
-        };
       }
 
       const launchOptions: any = {
