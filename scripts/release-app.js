@@ -180,7 +180,7 @@ async function main() {
 
   // 5. Git commit y tag
   console.log('\n📌 Haciendo commit y push del bump de versión...');
-  await runCmd('git', ['commit', '-am', `chore(release): bump version to ${newVersion}`]);
+  await runCmd('git', ['commit', '-am', `"chore(release): bump version to ${newVersion}"`]);
   await runCmd('git', ['push', 'origin', 'main']);
 
   console.log('\n========================================================');
