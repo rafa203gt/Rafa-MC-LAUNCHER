@@ -1,5 +1,11 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { BrowserWindow } from 'electron';
+import WebSocket from 'ws';
+
+// Polyfill globalThis.WebSocket for Electron Node.js environment
+if (typeof (globalThis as any).WebSocket === 'undefined') {
+  (globalThis as any).WebSocket = WebSocket;
+}
 
 const SUPABASE_URL = 'https://wukhkwwstsfvqcnyqoqu.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -36,16 +42,20 @@ export interface NewsAnnouncement {
 }
 
 export class RemoteConfigManager {
-  private supabase: SupabaseClient;
+  private supabase: SupabaseClient | null = null;
   private channel: RealtimeChannel | null = null;
   private cachedConfig: RemoteLauncherConfig | null = null;
   private cachedNews: NewsAnnouncement[] = [];
   private getMainWindow: (() => BrowserWindow | null) | null = null;
 
   constructor() {
-    this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false }
-    });
+    try {
+      this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: false }
+      });
+    } catch (err: any) {
+      console.warn(`[RemoteConfig] No se pudo inicializar Supabase client: ${err.message}`);
+    }
   }
 
   public initRealtime(getMainWindow: () => BrowserWindow | null): void {
@@ -58,6 +68,8 @@ export class RemoteConfigManager {
     this.fetchNews().then((news) => {
       this.broadcastNews(news);
     });
+
+    if (!this.supabase) return;
 
     // 2. Realtime WebSocket Listener
     try {
@@ -97,28 +109,35 @@ export class RemoteConfigManager {
 
     // 3. Fallback Periodic Polling every 10 seconds
     setInterval(async () => {
-      const cfg = await this.fetchRemoteConfig();
-      if (cfg) this.broadcastConfig(cfg);
-      const news = await this.fetchNews();
-      this.broadcastNews(news);
+      try {
+        const cfg = await this.fetchRemoteConfig();
+        if (cfg) this.broadcastConfig(cfg);
+        const news = await this.fetchNews();
+        this.broadcastNews(news);
+      } catch {}
     }, 10000);
   }
 
   private broadcastConfig(config: RemoteLauncherConfig): void {
-    const win = this.getMainWindow?.();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('remote:config-updated', config);
-    }
+    try {
+      const win = this.getMainWindow?.();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('remote:config-updated', config);
+      }
+    } catch {}
   }
 
   private broadcastNews(news: NewsAnnouncement[]): void {
-    const win = this.getMainWindow?.();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('remote:news-updated', news);
-    }
+    try {
+      const win = this.getMainWindow?.();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('remote:news-updated', news);
+      }
+    } catch {}
   }
 
   public async fetchRemoteConfig(): Promise<RemoteLauncherConfig | null> {
+    if (!this.supabase) return this.cachedConfig;
     try {
       const { data, error } = await this.supabase
         .from('launcher_config')
@@ -141,6 +160,7 @@ export class RemoteConfigManager {
   }
 
   public async fetchNews(): Promise<NewsAnnouncement[]> {
+    if (!this.supabase) return this.cachedNews;
     try {
       const { data, error } = await this.supabase
         .from('news_announcements')
