@@ -234,17 +234,46 @@ export class MinecraftLauncher {
       const minMemory = `${options.minRam || settings.minRam || 4096}M`;
       const maxMemory = `${options.maxRam || settings.maxRam || 8192}M`;
 
+      // Dynamic JVM Module Arguments for NeoForge / Forge / Fabric
+      const libDir = path.join(instanceDir, 'libraries');
+      const separator = process.platform === 'win32' ? ';' : ':';
+
+      let neoForgeJvmArgs: string[] = [];
+      if (settings.modLoader === 'neoforge') {
+        const moduleJars = [
+          path.join(libDir, 'cpw', 'mods', 'bootstraplauncher', '2.0.2', 'bootstraplauncher-2.0.2.jar'),
+          path.join(libDir, 'cpw', 'mods', 'securejarhandler', '3.0.8', 'securejarhandler-3.0.8.jar'),
+          path.join(libDir, 'org', 'ow2', 'asm', 'asm-commons', '9.10.1', 'asm-commons-9.10.1.jar'),
+          path.join(libDir, 'org', 'ow2', 'asm', 'asm-util', '9.10.1', 'asm-util-9.10.1.jar'),
+          path.join(libDir, 'org', 'ow2', 'asm', 'asm-analysis', '9.10.1', 'asm-analysis-9.10.1.jar'),
+          path.join(libDir, 'org', 'ow2', 'asm', 'asm-tree', '9.10.1', 'asm-tree-9.10.1.jar'),
+          path.join(libDir, 'org', 'ow2', 'asm', 'asm', '9.10.1', 'asm-9.10.1.jar'),
+          path.join(libDir, 'net', 'neoforged', 'JarJarFileSystems', '0.4.1', 'JarJarFileSystems-0.4.1.jar')
+        ].filter((f) => fs.existsSync(f));
+
+        neoForgeJvmArgs = [
+          '-Djava.net.preferIPv6Addresses=system',
+          `-DignoreList=client-extra,${mcVersion}.jar,neoforge.jar`,
+          `-DlibraryDirectory=${libDir}`,
+          '-p',
+          moduleJars.join(separator),
+          '--add-modules',
+          'ALL-MODULE-PATH'
+        ];
+      }
+
       // Flags obligatorios de acceso a módulos de Java 17/21 para NeoForge, Forge y Fabric
       const javaModuleArgs = [
-        '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
-        '--add-opens=java.base/java.util.jar=ALL-UNNAMED',
+        ...neoForgeJvmArgs,
+        '--add-opens=java.base/java.lang.invoke=cpw.mods.securejarhandler,ALL-UNNAMED',
+        '--add-opens=java.base/java.util.jar=cpw.mods.securejarhandler,ALL-UNNAMED',
         '--add-opens=java.base/java.lang=ALL-UNNAMED',
         '--add-opens=java.base/java.util=ALL-UNNAMED',
         '--add-opens=java.base/java.nio.file=ALL-UNNAMED',
-        '--add-opens=java.base/sun.security.util=ALL-UNNAMED',
+        '--add-opens=java.base/sun.security.util=cpw.mods.securejarhandler,ALL-UNNAMED',
         '--add-opens=java.base/sun.security.x509=ALL-UNNAMED',
         '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
-        '--add-exports=java.base/sun.security.util=ALL-UNNAMED',
+        '--add-exports=java.base/sun.security.util=cpw.mods.securejarhandler,ALL-UNNAMED',
         '--add-exports=jdk.naming.dns/com.sun.jndi.dns=java.naming'
       ];
 
