@@ -73,15 +73,27 @@ export const UpdateBanner: React.FC = () => {
 
         <div className="flex items-center gap-2 shrink-0">
           {isUpdating ? (
-            <div className="flex items-center gap-3 bg-indigo-950/60 border border-indigo-500/40 px-3 py-1.5 rounded-lg">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-              <div className="w-24 bg-indigo-950 rounded-full h-1.5 overflow-hidden border border-indigo-500/20">
+            <div className="flex items-center gap-3 bg-indigo-950/80 border border-indigo-500/40 px-3.5 py-1.5 rounded-xl shadow-inner">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+              <div className="w-28 bg-indigo-950 rounded-full h-2 overflow-hidden border border-indigo-500/20 p-0.5">
                 <div
-                  className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full transition-all duration-300"
+                  className="bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(34,211,238,0.6)]"
                   style={{ width: `${progress?.percent || 0}%` }}
                 />
               </div>
-              <span className="text-[11px] font-mono text-indigo-200">{progress?.percent || 0}%</span>
+              <div className="flex items-center gap-2 font-mono text-[11px]">
+                <span className="font-bold text-white">{progress?.percent || 0}%</span>
+                {progress?.speed && (
+                  <span className="text-cyan-300 text-[10px] bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                    {progress.speed}
+                  </span>
+                )}
+                {progress?.total ? (
+                  <span className="text-slate-400 text-[10px] hidden sm:inline">
+                    ({(progress.transferred / 1024 / 1024).toFixed(1)} / {(progress.total / 1024 / 1024).toFixed(1)} MB)
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : (
             <button

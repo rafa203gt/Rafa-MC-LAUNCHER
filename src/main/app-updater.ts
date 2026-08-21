@@ -44,6 +44,8 @@ export interface UpdateDownloadProgress {
   percent: number;
   transferred: number;
   total: number;
+  speed?: string;
+  speedBytes?: number;
 }
 
 export class AppUpdater {
@@ -139,14 +141,18 @@ export class AppUpdater {
 
     try {
       const tempDir = os.tmpdir();
-      const targetDownloadedPath = path.join(tempDir, `update_${Date.now()}_${fileName || 'Rafa-Launcher-Update.exe'}`);
+      const targetDownloadedPath = path.join(
+        tempDir,
+        `update_${Date.now()}_${fileName || 'Rafa-Launcher-Update.exe'}`
+      );
 
-      console.log(`[AppUpdater] ⚡ Descargando actualización acelerada (16 hilos): ${downloadUrl}`);
+      console.log(`[AppUpdater] ⚡ Descargando actualización de alta velocidad: ${downloadUrl}`);
 
-      await this.downloadMultiSegmentFile(downloadUrl, targetDownloadedPath, (loaded, total) => {
+      // Fast, non-blocking stream download with 8MB buffer and EMA speed tracking
+      await this.downloadHighSpeedStream(downloadUrl, targetDownloadedPath, (loaded, total, speed, speedBytes) => {
         if (onProgress) {
           const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
-          onProgress({ percent, transferred: loaded, total });
+          onProgress({ percent, transferred: loaded, total, speed, speedBytes });
         }
       });
 
@@ -155,8 +161,9 @@ export class AppUpdater {
       const pid = process.pid;
       const isInstaller = fileName.toLowerCase().includes('setup');
 
-      console.log(`[AppUpdater] Actualización lista. Ruta real del ejecutable: ${realExecPath}`);
-      console.log(`[AppUpdater] Directorio de guardado: ${realExecDir}`);
+      console.log(`[AppUpdater] Actualización descargada con éxito.`);
+      console.log(`[AppUpdater] Ruta ejecutable actual: ${realExecPath}`);
+      console.log(`[AppUpdater] Directorio de destino: ${realExecDir}`);
 
       if (process.platform === 'win32') {
         if (isInstaller) {
@@ -167,30 +174,25 @@ export class AppUpdater {
           });
           child.unref();
         } else {
-          // Robust PowerShell Updater with retry loop and full logging
+          // Robust PowerShell Updater with process release and instant hot-swap
           const newFileNameInDir = path.join(realExecDir, fileName || 'Rafa-MC-LAUNCHER.exe');
           const logFile = path.join(tempDir, 'rafa_updater.log');
 
           const psScript = `
             $log = '${logFile.replace(/'/g, "''")}';
-            "Starting update worker at $(Get-Date)" | Out-File $log;
+            "Starting update hot-swap at $(Get-Date)" | Out-File $log;
             
             $oldPid = ${pid};
             $newExe = '${targetDownloadedPath.replace(/'/g, "''")}';
             $currExe = '${realExecPath.replace(/'/g, "''")}';
             $destNamedExe = '${newFileNameInDir.replace(/'/g, "''")}';
             
-            "Waiting for process $oldPid to exit..." | Out-File $log -Append;
+            "Terminating any lingering launcher processes..." | Out-File $log -Append;
             try {
-              $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue;
-              if ($proc) {
-                $proc.WaitForExit(10000);
-              }
-            } catch {
-              "Process already exited or not found" | Out-File $log -Append;
-            }
+              Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue;
+            } catch {}
             
-            Start-Sleep -Milliseconds 1000;
+            Start-Sleep -Milliseconds 600;
             
             $copied = $false;
             for ($i = 0; $i -lt 30; $i++) {
@@ -204,8 +206,8 @@ export class AppUpdater {
                 "Copy successful!" | Out-File $log -Append;
                 break;
               } catch {
-                "Copy failed: $_" | Out-File $log -Append;
-                Start-Sleep -Milliseconds 500;
+                "Copy locked ($($_)): retrying..." | Out-File $log -Append;
+                Start-Sleep -Milliseconds 400;
               }
             }
             
@@ -233,11 +235,11 @@ export class AppUpdater {
         await shell.openPath(targetDownloadedPath);
       }
 
-      // Terminate cleanly to release Windows file locks
+      // Terminate immediately to release Windows file locks
       setTimeout(() => {
         app.quit();
-        setTimeout(() => app.exit(0), 400);
-      }, 500);
+        setTimeout(() => app.exit(0), 300);
+      }, 400);
     } catch (err: any) {
       this.isDownloading = false;
       console.error(`[AppUpdater] Error aplicando actualización: ${err.message}`);
@@ -246,171 +248,54 @@ export class AppUpdater {
   }
 
   /**
-   * 16-Segment Turbo Parallel Downloader with HTTP Range
+   * Ultra-Fast Streaming Downloader with 8MB write buffer and EMA progress calculation
    */
-  private async downloadMultiSegmentFile(
+  private async downloadHighSpeedStream(
     url: string,
     dest: string,
-    onProgress: (loaded: number, total: number) => void
+    onProgress: (loaded: number, total: number, speed: string, speedBytes: number) => void
   ): Promise<void> {
-    const finalUrl = await this.resolveRedirects(url);
-
-    let totalBytes = 0;
-    try {
-      const headRes = await axios.head(finalUrl, {
-        headers: { 'User-Agent': 'Rafa-MC-Launcher' },
-        timeout: 8000
-      });
-      const rawLen = headRes.headers['content-length'];
-      totalBytes = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
-    } catch {}
-
-    const segmentsCount = 16;
-    const chunkSize = Math.ceil(totalBytes / segmentsCount);
-
-    if (totalBytes <= 0 || chunkSize <= 0) {
-      return this.downloadSingleStream(finalUrl, dest, onProgress);
-    }
-
-    const tempDir = path.join(path.dirname(dest), 'updater_chunks_' + Date.now().toString(36));
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-    const chunkFiles: string[] = [];
-    const chunkProgress: number[] = new Array(segmentsCount).fill(0);
-    const tracker = new ProgressTracker(totalBytes);
-
-    const updateCombined = () => {
-      const loaded = chunkProgress.reduce((a, b) => a + b, 0);
-      tracker.update(loaded);
-      onProgress(loaded, totalBytes);
-    };
-
-    const downloadSegment = (index: number): Promise<void> => {
-      const start = index * chunkSize;
-      const end = index === segmentsCount - 1 ? totalBytes - 1 : (index + 1) * chunkSize - 1;
-      const chunkPath = path.join(tempDir, `chunk_${index}.part`);
-      chunkFiles[index] = chunkPath;
-
-      return new Promise((resolve, reject) => {
-        const isHttps = finalUrl.startsWith('https');
-        const client = isHttps ? https : http;
-        const agent = isHttps ? httpsAgent : httpAgent;
-
-        const req = client.get(
-          finalUrl,
-          {
-            agent,
-            headers: {
-              'User-Agent': 'Rafa-MC-Launcher',
-              Range: `bytes=${start}-${end}`
-            }
-          },
-          (res) => {
-            if (res.statusCode !== 206 && res.statusCode !== 200) {
-              return reject(new Error(`Segment error: HTTP ${res.statusCode}`));
-            }
-
-            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 4 * 1024 * 1024 });
-
-            res.on('data', (chunk) => {
-              chunkProgress[index] += chunk.length;
-              updateCombined();
-            });
-
-            res.pipe(writeStream);
-
-            writeStream.on('finish', () => {
-              writeStream.close(() => resolve());
-            });
-
-            writeStream.on('error', (err) => {
-              fs.unlink(chunkPath, () => reject(err));
-            });
-          }
-        );
-
-        req.on('error', reject);
-      });
-    };
-
-    try {
-      await Promise.all(Array.from({ length: segmentsCount }, (_, i) => downloadSegment(i)));
-
-      const finalStream = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
-      for (const chunkPath of chunkFiles) {
-        if (fs.existsSync(chunkPath)) {
-          const data = fs.readFileSync(chunkPath);
-          finalStream.write(data);
-          try {
-            fs.unlinkSync(chunkPath);
-          } catch {}
-        }
-      }
-      finalStream.end();
-      try {
-        fs.rmdirSync(tempDir);
-      } catch {}
-    } catch {
-      return this.downloadSingleStream(finalUrl, dest, onProgress);
-    }
-  }
-
-  private resolveRedirects(url: string): Promise<string> {
-    return new Promise((resolve) => {
-      const client = url.startsWith('https') ? https : http;
-      client
-        .get(url, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            resolve(this.resolveRedirects(res.headers.location));
-          } else {
-            resolve(url);
-          }
-        })
-        .on('error', () => resolve(url));
+    const response = await axios({
+      method: 'GET',
+      url,
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Rafa-MC-Launcher',
+        Accept: 'application/octet-stream, */*'
+      },
+      httpsAgent,
+      httpAgent,
+      maxRedirects: 10,
+      timeout: 60000
     });
-  }
 
-  private downloadSingleStream(
-    url: string,
-    dest: string,
-    onProgress: (loaded: number, total: number) => void
-  ): Promise<void> {
+    const rawLen = response.headers['content-length'];
+    const totalBytes = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
+    let loadedBytes = 0;
+
+    const tracker = new ProgressTracker(totalBytes);
+    const writeStream = fs.createWriteStream(dest, { highWaterMark: 8 * 1024 * 1024 });
+
     return new Promise((resolve, reject) => {
-      const isHttps = url.startsWith('https');
-      const client = isHttps ? https : http;
-      const agent = isHttps ? httpsAgent : httpAgent;
+      response.data.on('data', (chunk: Buffer) => {
+        loadedBytes += chunk.length;
+        const stats = tracker.update(loadedBytes);
+        onProgress(loadedBytes, totalBytes, `${stats.speedMBs} MB/s`, loadedBytes);
+      });
 
-      client
-        .get(url, { agent, headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            return this.downloadSingleStream(res.headers.location, dest, onProgress).then(resolve).catch(reject);
-          }
+      response.data.pipe(writeStream);
 
-          if (res.statusCode !== 200) {
-            return reject(new Error(`Error HTTP ${res.statusCode}`));
-          }
+      writeStream.on('finish', () => {
+        writeStream.close(() => resolve());
+      });
 
-          const rawLen = res.headers['content-length'];
-          const total = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
-          let loaded = 0;
-          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
+      writeStream.on('error', (err) => {
+        fs.unlink(dest, () => reject(err));
+      });
 
-          res.on('data', (chunk) => {
-            loaded += chunk.length;
-            onProgress(loaded, total);
-          });
-
-          res.pipe(file);
-
-          file.on('finish', () => {
-            file.close(() => resolve());
-          });
-
-          file.on('error', (err) => {
-            fs.unlink(dest, () => reject(err));
-          });
-        })
-        .on('error', reject);
+      response.data.on('error', (err: any) => {
+        fs.unlink(dest, () => reject(err));
+      });
     });
   }
 

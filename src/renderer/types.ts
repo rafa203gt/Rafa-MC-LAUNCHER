@@ -65,6 +65,8 @@ export interface UpdateDownloadProgress {
   percent: number;
   transferred: number;
   total: number;
+  speed?: string;
+  speedBytes?: number;
 }
 
 export interface MinecraftInstance {
