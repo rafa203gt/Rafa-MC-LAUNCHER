@@ -202,8 +202,12 @@ export class ModSynchronizer {
         });
       }
 
-      await this.downloadFile(file.downloadUrl, targetPath);
-      downloadedCount++;
+      try {
+        await this.downloadFile(file.downloadUrl, targetPath);
+        downloadedCount++;
+      } catch (err: any) {
+        console.warn(`[ModSync] Aviso: No se pudo descargar archivo individual ${file.path} (${err.message}). Continuando...`);
+      }
     }
 
     // 3. CLEAN UP DEPRECATED MODS
