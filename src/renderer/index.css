@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: #242938;
+  }
+  
+  body {
+    background-color: #090a0f;
+    color: #f1f5f9;
+    user-select: none;
+    -webkit-user-drag: none;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Custom Drag Region for Frameless Electron Window */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 17, 23, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #242938;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4256;
+}
+
+/* Pulse Glow Animation */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(16, 185, 129, 0.7);
+  }
+}
+
+.animate-glow {
+  animation: pulse-glow 2.5s infinite;
+}

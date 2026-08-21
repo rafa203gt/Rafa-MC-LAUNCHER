@@ -1,0 +1,24 @@
+{
+  "serverName": "Rafa Server",
+  "serverIp": "play.tuserver.com",
+  "serverPort": 25565,
+  "autoConnect": true,
+  "minecraftVersion": "1.20.1",
+  "modLoader": "fabric",
+  "modLoaderVersion": "0.15.11",
+  "modpackManifestUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/manifest.json",
+  "newsFeedUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/news.json",
+  "java": {
+    "autoDownload": true,
+    "requiredVersion": 17,
+    "customPath": ""
+  },
+  "client": {
+    "minRam": 2048,
+    "maxRam": 4096,
+    "fullscreen": false,
+    "width": 1280,
+    "height": 720,
+    "jvmArgs": ["-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", "-XX:MaxGCPauseMillis=200", "-XX:+UnlockExperimentalVMOptions", "-XX:+DisableExplicitGC", "-XX:+AlwaysPreTouch"]
+  }
+}

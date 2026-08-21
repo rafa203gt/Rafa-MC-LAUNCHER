@@ -1,0 +1,22 @@
+{
+  "name": "Rafa Server Modpack",
+  "version": "1.0.0",
+  "minecraftVersion": "1.20.1",
+  "modLoader": "fabric",
+  "modLoaderVersion": "0.15.11",
+  "updatedAt": "2026-08-21T14:37:14.480Z",
+  "files": [
+    {
+      "path": "mods/.gitkeep",
+      "sha1": "8cc6cf88e5f298d4d6848cce3db304c6161648a5",
+      "size": 89,
+      "downloadUrl": "https://github.com/rafa203gt/Rafa-MC-LAUNCHER/releases/download/v1.0.0/.gitkeep"
+    },
+    {
+      "path": "config/.gitkeep",
+      "sha1": "345f4bed4639705e46c7bdef67d43fd8330704ce",
+      "size": 66,
+      "downloadUrl": "https://raw.githubusercontent.com/rafa203gt/Rafa-MC-LAUNCHER/main/modpack/config/.gitkeep"
+    }
+  ]
+}
