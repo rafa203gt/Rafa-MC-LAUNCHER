@@ -10,6 +10,7 @@
     "dist-electron",
     "default-config.json"
   ],
+  "forceCodeSigning": false,
   "win": {
     "target": [
       {
@@ -20,7 +21,8 @@
         "target": "portable",
         "arch": ["x64"]
       }
-    ]
+    ],
+    "signAndEditExecutable": false
   },
   "nsis": {
     "oneClick": false,
