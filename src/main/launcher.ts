@@ -1,5 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import https from 'node:https';
+import http from 'node:http';
 import { spawn } from 'node:child_process';
 import axios from 'axios';
 import { createRequire } from 'node:module';
@@ -9,6 +11,20 @@ import { modSynchronizer } from './mod-sync';
 
 const require = createRequire(import.meta.url);
 const { Client, Authenticator } = require('minecraft-launcher-core');
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 32,
+  timeout: 60000
+});
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 32,
+  timeout: 60000
+});
 
 export interface LaunchOptions {
   username: string;
@@ -113,24 +129,29 @@ export class MinecraftLauncher {
     if (!fs.existsSync(vanillaJsonPath) || !fs.existsSync(vanillaJarPath)) {
       if (!fs.existsSync(vanillaDir)) fs.mkdirSync(vanillaDir, { recursive: true });
       if (onLog) onLog(`[Launcher] Descargando cliente base de Minecraft ${mcVersion}...`);
-      if (onProgress) {
-        onProgress({
-          stage: 'assets',
-          task: `Descargando cliente base de Minecraft ${mcVersion}...`,
-          total: 100,
-          current: 35,
-          percent: 35
-        });
-      }
 
-      const manifestRes = await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
+      const manifestRes = await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', { timeout: 10000 });
       const vInfo = manifestRes.data.versions.find((v: any) => v.id === mcVersion);
       if (vInfo) {
-        const vJsonRes = await axios.get(vInfo.url);
+        const vJsonRes = await axios.get(vInfo.url, { timeout: 10000 });
         fs.writeFileSync(vanillaJsonPath, JSON.stringify(vJsonRes.data, null, 2), 'utf-8');
         const clientUrl = vJsonRes.data.downloads.client.url;
-        const clientRes = await axios.get(clientUrl, { responseType: 'arraybuffer' });
-        fs.writeFileSync(vanillaJarPath, Buffer.from(clientRes.data));
+
+        const startTime = Date.now();
+        await this.downloadFastStream(clientUrl, vanillaJarPath, (loaded, total) => {
+          if (onProgress && total > 0) {
+            const percent = Math.min(100, Math.round((loaded / total) * 100));
+            const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
+            const mbps = (loaded / 1024 / 1024 / elapsed).toFixed(1);
+            onProgress({
+              stage: 'assets',
+              task: `⚡ Descargando cliente Minecraft ${mcVersion}: ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB (${mbps} MB/s)`,
+              total,
+              current: loaded,
+              percent
+            });
+          }
+        });
       }
     }
 
@@ -140,18 +161,22 @@ export class MinecraftLauncher {
       const tempInstaller = path.join(instanceDir, `installer-${neoForgeVersion}.jar`);
 
       if (onLog) onLog(`[Launcher] Descargando instalador de NeoForge ${neoForgeVersion}...`);
-      if (onProgress) {
-        onProgress({
-          stage: 'assets',
-          task: `Descargando instalador oficial de NeoForge ${neoForgeVersion}...`,
-          total: 100,
-          current: 55,
-          percent: 55
-        });
-      }
 
-      const installerRes = await axios.get(installerUrl, { responseType: 'arraybuffer' });
-      fs.writeFileSync(tempInstaller, Buffer.from(installerRes.data));
+      const startTime = Date.now();
+      await this.downloadFastStream(installerUrl, tempInstaller, (loaded, total) => {
+        if (onProgress && total > 0) {
+          const percent = Math.min(100, Math.round((loaded / total) * 100));
+          const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
+          const mbps = (loaded / 1024 / 1024 / elapsed).toFixed(1);
+          onProgress({
+            stage: 'assets',
+            task: `⚡ Descargando instalador NeoForge ${neoForgeVersion}: ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB (${mbps} MB/s)`,
+            total,
+            current: loaded,
+            percent
+          });
+        }
+      });
 
       if (javaPath && fs.existsSync(javaPath)) {
         if (onLog) onLog(`[Launcher] Ejecutando parchador binario oficial de NeoForge...`);
@@ -182,6 +207,49 @@ export class MinecraftLauncher {
     }
 
     return versionId;
+  }
+
+  private downloadFastStream(
+    url: string,
+    dest: string,
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const client = url.startsWith('https') ? https : http;
+      const agent = url.startsWith('https') ? httpsAgent : httpAgent;
+
+      client
+        .get(url, { agent, headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            return this.downloadFastStream(res.headers.location, dest, onProgress).then(resolve).catch(reject);
+          }
+
+          if (res.statusCode !== 200) {
+            return reject(new Error(`Error descargando recurso: HTTP ${res.statusCode}`));
+          }
+
+          const rawLen = res.headers['content-length'];
+          const total = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
+          let loaded = 0;
+          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
+
+          res.on('data', (chunk) => {
+            loaded += chunk.length;
+            if (onProgress) onProgress(loaded, total);
+          });
+
+          res.pipe(file);
+
+          file.on('finish', () => {
+            file.close(() => resolve());
+          });
+
+          file.on('error', (err) => {
+            fs.unlink(dest, () => reject(err));
+          });
+        })
+        .on('error', reject);
+    });
   }
 
   private async ensureFabricVersionJson(

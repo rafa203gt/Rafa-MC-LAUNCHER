@@ -2,11 +2,26 @@ import path from 'node:path';
 import fs from 'node:fs';
 import https from 'node:https';
 import http from 'node:http';
+import axios from 'axios';
 import { createRequire } from 'node:module';
 import { configStore } from './config-store';
 
 const require = createRequire(import.meta.url);
 const AdmZip = require('adm-zip');
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 32,
+  timeout: 60000
+});
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 64,
+  maxFreeSockets: 32,
+  timeout: 60000
+});
 
 export interface DownloadProgress {
   stage: string;
@@ -66,7 +81,7 @@ export class JavaManager {
     if (onProgress) {
       onProgress({
         stage: 'java',
-        task: `Descargando Java ${version} OpenJDK (Adoptium)...`,
+        task: `⚡ Conectando al acelerador de descarga de Java ${version} OpenJDK...`,
         total: 100,
         current: 0,
         percent: 0
@@ -81,12 +96,15 @@ export class JavaManager {
     const zipPath = path.join(this.runtimeDir, `temurin${version}.zip`);
     const downloadUrl = `https://api.adoptium.net/v3/binary/latest/${version}/ga/windows/x64/jdk/hotspot/normal/eclipse`;
 
-    await this.downloadWithRedirects(downloadUrl, zipPath, (loaded, total) => {
+    const startTime = Date.now();
+    await this.downloadMultiSegmentFile(downloadUrl, zipPath, (loaded, total) => {
       if (onProgress && total > 0) {
         const percent = Math.min(100, Math.round((loaded / total) * 100));
+        const elapsed = Math.max(0.1, (Date.now() - startTime) / 1000);
+        const mbps = (loaded / 1024 / 1024 / elapsed).toFixed(1);
         onProgress({
           stage: 'java',
-          task: `Descargando Java ${version} (${(loaded / 1024 / 1024).toFixed(1)} MB / ${(total / 1024 / 1024).toFixed(1)} MB)...`,
+          task: `⚡ Descargando Java ${version}: ${(loaded / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} MB (${mbps} MB/s)`,
           total,
           current: loaded,
           percent
@@ -109,9 +127,7 @@ export class JavaManager {
 
     try {
       fs.unlinkSync(zipPath);
-    } catch {
-      // Cleanup
-    }
+    } catch {}
 
     const javaPath = this.getJavaExecutablePath(version);
     if (!javaPath) {
@@ -121,53 +137,167 @@ export class JavaManager {
     return javaPath;
   }
 
-  private downloadWithRedirects(
+  private async downloadMultiSegmentFile(
+    url: string,
+    dest: string,
+    onProgress: (loaded: number, total: number) => void
+  ): Promise<void> {
+    const finalUrl = await this.resolveRedirects(url);
+
+    let totalBytes = 0;
+    try {
+      const headRes = await axios.head(finalUrl, {
+        headers: { 'User-Agent': 'Rafa-MC-Launcher' },
+        timeout: 8000
+      });
+      const rawLen = headRes.headers['content-length'];
+      totalBytes = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
+    } catch {}
+
+    const segmentsCount = 8;
+    const chunkSize = Math.ceil(totalBytes / segmentsCount);
+
+    if (totalBytes <= 0 || chunkSize <= 0) {
+      return this.downloadSingleStream(finalUrl, dest, onProgress);
+    }
+
+    const tempDir = path.join(this.runtimeDir, 'java_chunks_' + Date.now().toString(36));
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+    const chunkFiles: string[] = [];
+    const chunkProgress: number[] = new Array(segmentsCount).fill(0);
+
+    const updateCombined = () => {
+      const loaded = chunkProgress.reduce((a, b) => a + b, 0);
+      onProgress(loaded, totalBytes);
+    };
+
+    const downloadSegment = (index: number): Promise<void> => {
+      const start = index * chunkSize;
+      const end = index === segmentsCount - 1 ? totalBytes - 1 : (index + 1) * chunkSize - 1;
+      const chunkPath = path.join(tempDir, `chunk_${index}.part`);
+      chunkFiles[index] = chunkPath;
+
+      return new Promise((resolve, reject) => {
+        const isHttps = finalUrl.startsWith('https');
+        const client = isHttps ? https : http;
+        const agent = isHttps ? httpsAgent : httpAgent;
+
+        const req = client.get(
+          finalUrl,
+          {
+            agent,
+            headers: {
+              'User-Agent': 'Rafa-MC-Launcher',
+              Range: `bytes=${start}-${end}`
+            }
+          },
+          (res) => {
+            if (res.statusCode !== 206 && res.statusCode !== 200) {
+              return reject(new Error(`Segment error: HTTP ${res.statusCode}`));
+            }
+
+            const writeStream = fs.createWriteStream(chunkPath, { highWaterMark: 2 * 1024 * 1024 });
+
+            res.on('data', (chunk) => {
+              chunkProgress[index] += chunk.length;
+              updateCombined();
+            });
+
+            res.pipe(writeStream);
+
+            writeStream.on('finish', () => {
+              writeStream.close(() => resolve());
+            });
+
+            writeStream.on('error', (err) => {
+              fs.unlink(chunkPath, () => reject(err));
+            });
+          }
+        );
+
+        req.on('error', reject);
+      });
+    };
+
+    try {
+      await Promise.all(Array.from({ length: segmentsCount }, (_, i) => downloadSegment(i)));
+
+      const finalStream = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
+      for (const chunkPath of chunkFiles) {
+        if (fs.existsSync(chunkPath)) {
+          const data = fs.readFileSync(chunkPath);
+          finalStream.write(data);
+          try {
+            fs.unlinkSync(chunkPath);
+          } catch {}
+        }
+      }
+      finalStream.end();
+      try {
+        fs.rmdirSync(tempDir);
+      } catch {}
+    } catch {
+      return this.downloadSingleStream(finalUrl, dest, onProgress);
+    }
+  }
+
+  private resolveRedirects(url: string): Promise<string> {
+    return new Promise((resolve) => {
+      const client = url.startsWith('https') ? https : http;
+      client
+        .get(url, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            resolve(this.resolveRedirects(res.headers.location));
+          } else {
+            resolve(url);
+          }
+        })
+        .on('error', () => resolve(url));
+    });
+  }
+
+  private downloadSingleStream(
     url: string,
     dest: string,
     onProgress: (loaded: number, total: number) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const makeRequest = (currentUrl: string, depth = 0) => {
-        if (depth > 5) {
-          return reject(new Error('Demasiadas redirecciones al descargar Java.'));
-        }
+      const isHttps = url.startsWith('https');
+      const client = isHttps ? https : http;
+      const agent = isHttps ? httpsAgent : httpAgent;
 
-        const client = currentUrl.startsWith('https') ? https : http;
-        client
-          .get(currentUrl, { headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
-            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-              return makeRequest(res.headers.location, depth + 1);
-            }
+      client
+        .get(url, { agent, headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            return this.downloadSingleStream(res.headers.location, dest, onProgress).then(resolve).catch(reject);
+          }
 
-            if (res.statusCode !== 200) {
-              return reject(new Error(`Fallo en la descarga de Java. Código de estado: ${res.statusCode}`));
-            }
+          if (res.statusCode !== 200) {
+            return reject(new Error(`Fallo descarga Java: HTTP ${res.statusCode}`));
+          }
 
-            const total = parseInt(res.headers['content-length'] || '0', 10);
-            let loaded = 0;
-            const file = fs.createWriteStream(dest);
+          const rawLen = res.headers['content-length'];
+          const total = typeof rawLen === 'number' ? rawLen : parseInt(String(rawLen || '0'), 10);
+          let loaded = 0;
+          const file = fs.createWriteStream(dest, { highWaterMark: 2 * 1024 * 1024 });
 
-            res.on('data', (chunk) => {
-              loaded += chunk.length;
-              onProgress(loaded, total);
-            });
-
-            res.pipe(file);
-
-            file.on('finish', () => {
-              file.close(() => resolve());
-            });
-
-            file.on('error', (err) => {
-              fs.unlink(dest, () => reject(err));
-            });
-          })
-          .on('error', (err) => {
-            reject(err);
+          res.on('data', (chunk) => {
+            loaded += chunk.length;
+            onProgress(loaded, total);
           });
-      };
 
-      makeRequest(url);
+          res.pipe(file);
+
+          file.on('finish', () => {
+            file.close(() => resolve());
+          });
+
+          file.on('error', (err) => {
+            fs.unlink(dest, () => reject(err));
+          });
+        })
+        .on('error', reject);
     });
   }
 }
