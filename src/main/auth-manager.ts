@@ -300,22 +300,45 @@ export class AuthManager {
     msExpiresIn: number
   ): Promise<MicrosoftAccount> {
     // 1. Xbox Live User Authentication
-    const xblRes = await axios.post(
-      'https://user.auth.xboxlive.com/user/authenticate',
-      {
-        Properties: {
-          AuthMethod: 'RPS',
-          SiteName: 'user.auth.xboxlive.com',
-          RpsTicket: `d=${msAccessToken}`
-        },
-        RelyingParty: 'http://auth.xboxlive.com',
-        TokenType: 'JWT'
-      },
-      { headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: 15000 }
-    );
+    let xblRes: any;
+    const rpsTicket = msAccessToken.startsWith('d=') || msAccessToken.startsWith('t=') ? msAccessToken : `d=${msAccessToken}`;
 
-    const xblToken = xblRes.data.Token;
-    const userHash = xblRes.data.DisplayClaims?.xui?.[0]?.uhs;
+    try {
+      xblRes = await axios.post(
+        'https://user.auth.xboxlive.com/user/authenticate',
+        {
+          Properties: {
+            AuthMethod: 'RPS',
+            SiteName: 'user.auth.xboxlive.com',
+            RpsTicket: rpsTicket
+          },
+          RelyingParty: 'http://auth.xboxlive.com',
+          TokenType: 'JWT'
+        },
+        { headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: 15000 }
+      );
+    } catch (xblErr: any) {
+      try {
+        xblRes = await axios.post(
+          'https://user.auth.xboxlive.com/user/authenticate',
+          {
+            Properties: {
+              AuthMethod: 'RPS',
+              SiteName: 'user.auth.xboxlive.com',
+              RpsTicket: msAccessToken
+            },
+            RelyingParty: 'http://auth.xboxlive.com',
+            TokenType: 'JWT'
+          },
+          { headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: 15000 }
+        );
+      } catch {
+        throw new Error(`Error en autenticación Xbox Live: ${xblErr.response?.data?.Message || xblErr.message}`);
+      }
+    }
+
+    const xblToken = xblRes?.data?.Token;
+    const userHash = xblRes?.data?.DisplayClaims?.xui?.[0]?.uhs;
 
     if (!xblToken || !userHash) {
       throw new Error('No se pudo obtener el token de Xbox Live');
@@ -342,7 +365,7 @@ export class AuthManager {
         if (xErr === 2148916233) {
           throw new Error('Esta cuenta Microsoft no tiene un perfil de Xbox Live. Crea uno en xbox.com e inténtalo de nuevo.');
         } else if (xErr === 2148916238) {
-          throw new Error('Esta cuenta Microsoft es de un menor de edad y requiere ser autorizada por una cuenta familiar.');
+          throw new Error('Esta cuenta Microsoft es de un menor de edad y requiere ser autorizada por una cuenta familiar en Microsoft.');
         }
       }
       throw new Error(`Error en autorización XSTS: ${err.message}`);
@@ -351,13 +374,18 @@ export class AuthManager {
     const xstsToken = xstsRes.data.Token;
 
     // 3. Login with Xbox in Minecraft Services
-    const mcLoginRes = await axios.post(
-      'https://api.minecraftservices.com/authentication/login_with_xbox',
-      {
-        identityToken: `XBL3.0 x=${userHash};${xstsToken}`
-      },
-      { headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: 15000 }
-    );
+    let mcLoginRes: any;
+    try {
+      mcLoginRes = await axios.post(
+        'https://api.minecraftservices.com/authentication/login_with_xbox',
+        {
+          identityToken: `XBL3.0 x=${userHash};${xstsToken}`
+        },
+        { headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, timeout: 15000 }
+      );
+    } catch (mcLoginErr: any) {
+      throw new Error(`Error en inicio de sesión de Minecraft: ${mcLoginErr.response?.data?.errorMessage || mcLoginErr.message}`);
+    }
 
     const mcAccessToken = mcLoginRes.data.access_token;
     const mcExpiresIn = mcLoginRes.data.expires_in || 86400;
@@ -376,12 +404,22 @@ export class AuthManager {
     }
 
     // 5. Get Minecraft Profile (Username, UUID, Skins)
-    const profileRes = await axios.get('https://api.minecraftservices.com/minecraft/profile', {
-      headers: { Authorization: `Bearer ${mcAccessToken}` },
-      timeout: 10000
-    });
+    let profileData: any;
+    try {
+      const profileRes = await axios.get('https://api.minecraftservices.com/minecraft/profile', {
+        headers: { Authorization: `Bearer ${mcAccessToken}` },
+        timeout: 10000
+      });
+      profileData = profileRes.data;
+    } catch (profileErr: any) {
+      if (profileErr.response?.status === 404 || profileErr.response?.status === 401) {
+        throw new Error(
+          'Esta cuenta de Microsoft no tiene una copia de Minecraft Java Edition comprada o un perfil creado. Puedes jugar en modo No-Premium con tu apodo deseado.'
+        );
+      }
+      throw new Error(`Error al obtener el perfil de Minecraft: ${profileErr.response?.data?.errorMessage || profileErr.message}`);
+    }
 
-    const profileData = profileRes.data;
     const username = profileData.name;
     const uuid = profileData.id;
     const activeSkin = profileData.skins?.find((s: any) => s.state === 'ACTIVE') || profileData.skins?.[0];
