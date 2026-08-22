@@ -94,9 +94,10 @@ export class CrashAnalyzer {
     }
 
     // C. Corrupt Mod / Missing Dependency / Jar Error
-    const modMatch = combinedText.match(/ModLoadingException:.*?([a-zA-Z0-9_\-]+\.jar)/i) ||
-      combinedText.match(/Failed to load mod.*?([a-zA-Z0-9_\-]+)/i) ||
-      combinedText.match(/Invalid ZIP archive.*?([a-zA-Z0-9_\-]+\.jar)/i) ||
+    const modMatch =
+      combinedText.match(/(?:ModLoadingException|Failed to load mod|Invalid ZIP archive|error loading)[^\n]*?\s([a-zA-Z0-9_\-\.]+\.jar)/i) ||
+      combinedText.match(/([a-zA-Z0-9_\-\.]+\.jar)/i) ||
+      combinedText.match(/Failed to load mod\s+([a-zA-Z0-9_\-]+)/i) ||
       combinedText.match(/DuplicateModsException/i);
 
     if (

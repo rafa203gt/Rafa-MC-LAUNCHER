@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ConfigStore } from '../src/main/config-store';
 import fs from 'fs';
-import path from 'path';
 
-describe('ConfigStore Unit Tests', () => {
+describe('ConfigStore Unit & Boundary Tests', () => {
   let store: ConfigStore;
 
   beforeEach(() => {
@@ -23,7 +22,7 @@ describe('ConfigStore Unit Tests', () => {
     expect(fs.existsSync(runtimeDir)).toBe(true);
   });
 
-  it('debe devolver la configuración por defecto válida para Minecraft 1.20.1', () => {
+  it('debe devolver la configuración por defecto válida', () => {
     const settings = store.getSettings();
 
     expect(settings.minecraftVersion).toBeDefined();
@@ -46,5 +45,15 @@ describe('ConfigStore Unit Tests', () => {
     const reloaded = store.getSettings();
     expect(reloaded.username).toBe('TesterPlayer');
     expect(reloaded.maxRam).toBe(6144);
+  });
+
+  it('debe manejar nombres de usuario con caracteres especiales y espacios sin corromper el almacén', () => {
+    const updated = store.saveSettings({
+      username: 'Player_123-Pro! #1'
+    });
+
+    expect(updated.username).toBe('Player_123-Pro! #1');
+    const reloaded = store.getSettings();
+    expect(reloaded.username).toBe('Player_123-Pro! #1');
   });
 });
