@@ -96,3 +96,17 @@ export interface CrashReport {
   resolved: boolean;
   created_at: string;
 }
+
+export interface LauncherUser {
+  client_id: string;
+  device_name: string;
+  player_username?: string;
+  os_platform?: string;
+  total_ram_gb?: number;
+  launcher_version?: string;
+  last_instance_played?: string;
+  launch_count: number;
+  first_seen: string;
+  last_seen: string;
+  is_online?: boolean;
+}

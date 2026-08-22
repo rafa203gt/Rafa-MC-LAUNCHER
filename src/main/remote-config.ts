@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { BrowserWindow } from 'electron';
 import WebSocket from 'ws';
+import os from 'node:os';
 
 // Polyfill globalThis.WebSocket for Electron Node.js environment
 if (typeof (globalThis as any).WebSocket === 'undefined') {
@@ -295,6 +296,61 @@ export class RemoteConfigManager {
       return true;
     } catch (err: any) {
       console.warn(`[RemoteConfig] No se pudo enviar reporte de crash: ${err.message}`);
+      return false;
+    }
+  }
+
+  public async trackUserActivity(data: {
+    playerUsername?: string;
+    lastInstancePlayed?: string;
+    isGameLaunch?: boolean;
+  }): Promise<boolean> {
+    if (!this.supabase) return false;
+    try {
+      const { configStore } = await import('./config-store');
+      const clientId = configStore.getClientId();
+      const hostname = os.hostname() || 'PC';
+      let username = 'Usuario';
+      try {
+        username = os.userInfo()?.username || 'Usuario';
+      } catch {}
+      const deviceName = `${hostname} (${username})`;
+      const platform = process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux';
+      const osPlatform = `${platform} (${process.arch}, ${os.release()})`;
+      const totalRamGb = Math.round((os.totalmem() / (1024 * 1024 * 1024)) * 10) / 10;
+
+      // 1. Check existing record
+      const { data: existing } = await this.supabase
+        .from('launcher_users')
+        .select('client_id, launch_count, first_seen')
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      const currentLaunchCount = Number(existing?.launch_count) || 0;
+      const nextLaunchCount = data.isGameLaunch ? currentLaunchCount + 1 : Math.max(1, currentLaunchCount);
+
+      const payload = {
+        client_id: clientId,
+        device_name: deviceName,
+        player_username: data.playerUsername || 'Jugador',
+        os_platform: osPlatform,
+        total_ram_gb: totalRamGb,
+        launcher_version: '1.0.27',
+        last_instance_played: data.lastInstancePlayed || 'atm10',
+        launch_count: nextLaunchCount,
+        last_seen: new Date().toISOString(),
+        is_online: true
+      };
+
+      const { error } = await this.supabase.from('launcher_users').upsert(payload, { onConflict: 'client_id' });
+      if (error) {
+        console.warn(`[RemoteConfig] Aviso registrando actividad de usuario: ${error.message}`);
+        return false;
+      }
+      console.log(`[RemoteConfig] 👤 Registro de usuario sincronizado: ${deviceName}`);
+      return true;
+    } catch (err: any) {
+      console.warn(`[RemoteConfig] Error en tracking de usuario: ${err.message}`);
       return false;
     }
   }

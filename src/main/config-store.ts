@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 
 export interface AppSettings {
   username: string;
@@ -26,6 +27,7 @@ export class ConfigStore {
   private baseDir: string;
   private settingsFile: string;
   private cachedSettings: AppSettings | null = null;
+  private cachedClientId: string | null = null;
 
   constructor() {
     const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
@@ -37,6 +39,28 @@ export class ConfigStore {
 
   public getBaseDir(): string {
     return this.baseDir;
+  }
+
+  public getClientId(): string {
+    if (this.cachedClientId) return this.cachedClientId;
+    const idFile = path.join(this.baseDir, 'client-id.txt');
+    try {
+      if (fs.existsSync(idFile)) {
+        const id = fs.readFileSync(idFile, 'utf-8').trim();
+        if (id.length >= 6) {
+          this.cachedClientId = id;
+          return id;
+        }
+      }
+    } catch {}
+
+    const rawHost = (os.hostname() || 'pc').toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const newId = `${rawHost}-${crypto.randomUUID().slice(0, 8)}`;
+    try {
+      fs.writeFileSync(idFile, newId, 'utf-8');
+    } catch {}
+    this.cachedClientId = newId;
+    return newId;
   }
 
   private activeInstanceFolder: string = 'default';

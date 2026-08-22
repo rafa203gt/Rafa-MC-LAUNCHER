@@ -80,6 +80,17 @@ app.whenReady().then(async () => {
   // Initialize Supabase Realtime live sync
   remoteConfigManager.initRealtime(() => mainWindow);
 
+  // Safely register and track active user device
+  try {
+    const settings = configStore.getSettings();
+    const activeInst = instanceManager.getActiveInstance();
+    remoteConfigManager.trackUserActivity({
+      playerUsername: settings.username || 'Jugador',
+      lastInstancePlayed: activeInst?.name || 'All The Mods 10',
+      isGameLaunch: false
+    });
+  } catch {}
+
   // Initialize System Tray for Extreme Performance Mode
   const { trayManager } = await import('./tray-manager');
   if (mainWindow) {
@@ -178,6 +189,13 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
 
   const activeInst = instanceManager.getActiveInstance();
   const settings = configStore.getSettings();
+
+  // Track game launch activity in Supabase
+  remoteConfigManager.trackUserActivity({
+    playerUsername: settings.username || options?.username || 'Jugador',
+    lastInstancePlayed: activeInst?.name || 'All the Mods 10',
+    isGameLaunch: true
+  });
 
   discordRPC.updateActivity({
     instanceName: activeInst?.name || 'All the Mods 10',

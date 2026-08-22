@@ -16,7 +16,8 @@ import {
   UserCheck,
   AlertCircle,
   Sparkles,
-  Cloud
+  Cloud,
+  Users
 } from 'lucide-react';
 import {
   supabase,
@@ -25,7 +26,8 @@ import {
   ModpackMod,
   CrashReport,
   RemoteInstance,
-  Shaderpack
+  Shaderpack,
+  LauncherUser
 } from './supabase';
 import { ConfigEditor } from './components/ConfigEditor';
 import { MaintenanceToggle } from './components/MaintenanceToggle';
@@ -37,6 +39,7 @@ import { ShadersManager } from './components/ShadersManager';
 import { CrashAnalytics } from './components/CrashAnalytics';
 import { LiveServerMonitor } from './components/LiveServerMonitor';
 import { CloudAssetManager } from './components/CloudAssetManager';
+import { UsersAnalytics } from './components/UsersAnalytics';
 
 export const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -48,10 +51,11 @@ export const App: React.FC = () => {
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<
-    'cloud_assets' | 'instances' | 'mods' | 'shaders' | 'config' | 'maintenance' | 'banner' | 'news' | 'crashes' | 'monitor'
+    'cloud_assets' | 'instances' | 'users' | 'mods' | 'shaders' | 'config' | 'maintenance' | 'banner' | 'news' | 'crashes' | 'monitor'
   >('cloud_assets');
   const [config, setConfig] = useState<LauncherConfig | null>(null);
   const [instances, setInstances] = useState<RemoteInstance[]>([]);
+  const [users, setUsers] = useState<LauncherUser[]>([]);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
   const [mods, setMods] = useState<ModpackMod[]>([]);
   const [shaders, setShaders] = useState<Shaderpack[]>([]);
@@ -171,6 +175,13 @@ export const App: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(50);
       if (crashData) setCrashes(crashData as CrashReport[]);
+
+      // 7. Users / Telemetry
+      const { data: usersData } = await supabase
+        .from('launcher_users')
+        .select('*')
+        .order('last_seen', { ascending: false });
+      if (usersData) setUsers(usersData as LauncherUser[]);
     } catch (err) {
       console.error('Error fetching Supabase data:', err);
     } finally {
@@ -195,6 +206,13 @@ export const App: React.FC = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'instances' },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'launcher_users' },
         () => {
           fetchData();
         }
@@ -405,6 +423,18 @@ export const App: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('users')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeTab === 'users'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-admin-card'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Jugadores & Equipos ({users.length})
+          </button>
+
+          <button
             onClick={() => setActiveTab('mods')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
               activeTab === 'mods'
@@ -518,6 +548,10 @@ export const App: React.FC = () => {
 
             {activeTab === 'instances' && (
               <InstancesManager instances={instances} onRefresh={fetchData} />
+            )}
+
+            {activeTab === 'users' && (
+              <UsersAnalytics users={users} onRefresh={fetchData} isLoading={isLoading} />
             )}
 
             {activeTab === 'mods' && (
