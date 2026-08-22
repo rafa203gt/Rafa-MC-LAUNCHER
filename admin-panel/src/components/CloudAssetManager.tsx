@@ -278,17 +278,24 @@ export const CloudAssetManager: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 w-full md:w-auto">
-          <button
-            onClick={() => setShowTokenModal(true)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all ${
-              token
-                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-                : 'bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse'
-            }`}
-          >
-            <Key className="w-4 h-4" />
-            {token ? 'Token Configurado' : '⚠️ Configurar Token de GitHub'}
-          </button>
+          {gitHubStorage.hasEnvToken() ? (
+            <div className="px-3.5 py-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-2 shadow-inner">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Token Seguro (.env Activo)</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowTokenModal(true)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all ${
+                token
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  : 'bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse'
+              }`}
+            >
+              <Key className="w-4 h-4" />
+              {token ? 'Token Configurado' : '⚠️ Configurar Token de GitHub'}
+            </button>
+          )}
 
           <button
             onClick={handleBroadcastSync}

@@ -17,7 +17,15 @@ export class GitHubStorageService {
   private repo: string = 'Rafa-MC-LAUNCHER';
   private releaseTag: string = 'modpack-assets';
 
+  public hasEnvToken(): boolean {
+    return !!((import.meta as any).env?.VITE_GITHUB_PAT);
+  }
+
   public getToken(): string {
+    const envToken = (import.meta as any).env?.VITE_GITHUB_PAT;
+    if (envToken && typeof envToken === 'string' && envToken.trim() !== '') {
+      return envToken.trim();
+    }
     return localStorage.getItem('github_pat_token') || '';
   }
 
@@ -26,6 +34,10 @@ export class GitHubStorageService {
   }
 
   public getRepo(): string {
+    const envRepo = (import.meta as any).env?.VITE_GITHUB_REPO;
+    if (envRepo && typeof envRepo === 'string' && envRepo.trim() !== '') {
+      return envRepo.trim();
+    }
     return localStorage.getItem('github_repo_name') || `${this.owner}/${this.repo}`;
   }
 
