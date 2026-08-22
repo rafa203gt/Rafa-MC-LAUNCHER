@@ -96,7 +96,8 @@ export class CosmeticsAgentManager {
   public async ensure3DCosmeticsResourcepack(
     instanceDir: string,
     onLog?: (line: string) => void,
-    playerUsername?: string
+    playerUsername?: string,
+    multiplayerData: any[] = []
   ): Promise<string> {
     const rpDir = path.join(instanceDir, 'resourcepacks');
     if (!fs.existsSync(rpDir)) {
@@ -145,6 +146,112 @@ export class CosmeticsAgentManager {
             }
           }
         }
+      } catch (skinInjectErr) {
+        console.warn('[CosmeticsAgent] Error inyectando skin en el resourcepack:', skinInjectErr);
+      }
+    }
+
+    // 2. Definición de modelos 3D (.jem para Entity Model Features / OptiFine)
+    const dragonWingsModels = [
+      {
+        part: 'body',
+        id: 'dragon_wings_left',
+        attach: true,
+        invertAxis: 'xy',
+        translate: [0, 24, 0],
+        boxes: [{ coordinates: [-12, 10, 2, 12, 14, 1], textureOffset: [0, 16] }],
+        animations: [
+          {
+            'dragon_wings_left.ry': 'sin(time * 0.3) * 0.6 + 0.3',
+            'dragon_wings_left.rz': 'cos(time * 0.3) * 0.15'
+          }
+        ]
+      },
+      {
+        part: 'body',
+        id: 'dragon_wings_right',
+        attach: true,
+        invertAxis: 'xy',
+        translate: [0, 24, 0],
+        boxes: [{ coordinates: [0, 10, 2, 12, 14, 1], textureOffset: [0, 16] }],
+        animations: [
+          {
+            'dragon_wings_right.ry': '-sin(time * 0.3) * 0.6 - 0.3',
+            'dragon_wings_right.rz': '-cos(time * 0.3) * 0.15'
+          }
+        ]
+      }
+    ];
+
+    const crownModels = [
+      {
+        part: 'head',
+        id: 'king_crown_3d',
+        attach: true,
+        invertAxis: 'xy',
+        translate: [0, 0, 0],
+        boxes: [{ coordinates: [-4.5, 8.0, -4.5, 9, 3, 9], textureOffset: [0, 32] }]
+      }
+    ];
+
+    const haloModels = [
+      {
+        part: 'head',
+        id: 'celestial_halo_3d',
+        attach: true,
+        invertAxis: 'xy',
+        translate: [0, 0, 0],
+        boxes: [{ coordinates: [-5, 12, -5, 10, 1, 10], textureOffset: [0, 48] }],
+        animations: [
+          {
+            'celestial_halo_3d.ry': 'time * 0.05',
+            'celestial_halo_3d.ty': 'sin(time * 0.1) * 0.5'
+          }
+        ]
+      }
+    ];
+
+    const bandanaModels = [
+      {
+        part: 'head',
+        id: 'ninja_bandana_3d',
+        attach: true,
+        invertAxis: 'xy',
+        translate: [0, 0, 0],
+        boxes: [{ coordinates: [-4.2, 0.0, -4.2, 8.4, 4.2, 8.4], textureOffset: [32, 0] }]
+      }
+    ];
+
+    // Multijugador: Asignar modelos por nombre de usuario usando ETF + EMF
+    let playerProperties = '';
+    
+    // Default player.jem (sin cosmeticos 3D para evitar que todos tengan alas)
+    zip.addFile('assets/minecraft/optifine/cem/player.jem', Buffer.from(JSON.stringify({ models: [] }), 'utf-8'));
+
+    multiplayerData.forEach((user, index) => {
+      const variant = index + 1;
+      // Registrar la propiedad de variante por nombre de jugador
+      playerProperties += `skins.${variant}=${variant}\n`;
+      playerProperties += `name.${variant}=${user.username}\n`;
+
+      // Componer el modelo .jem específico para este jugador
+      const userModels: any[] = [];
+      const c = user.cosmetic_id || '';
+      if (c.includes('wings')) userModels.push(...dragonWingsModels);
+      if (c.includes('crown')) userModels.push(...crownModels);
+      if (c.includes('halo')) userModels.push(...haloModels);
+      if (c.includes('bandana')) userModels.push(...bandanaModels);
+
+      const userJem = { models: userModels };
+      
+      // Guardar su modelo personalizado (EMF lo leerá automáticamente basado en la variante)
+      zip.addFile(`assets/minecraft/optifine/cem/player${variant}.jem`, Buffer.from(JSON.stringify(userJem, null, 2), 'utf-8'));
+    });
+
+    if (playerProperties) {
+      zip.addFile('assets/minecraft/optifine/random/entity/player/player.properties', Buffer.from(playerProperties, 'utf-8'));
+    }
+
     // Guardar paquete ZIP en disco
     zip.writeZip(packZipPath);
 
@@ -174,14 +281,14 @@ export class CosmeticsAgentManager {
         const res = await axios.get(emfUrl, { responseType: 'stream' });
         const writer = fs.createWriteStream(emfPath);
         res.data.pipe(writer);
-        await new Promise((resolve) => writer.on('finish', resolve));
+        await new Promise((resolve) => writer.on('finish', () => resolve(true)));
       }
       if (!fs.existsSync(etfPath)) {
         if (onLog) onLog('[CosmeticsEngine] Descargando mod ETF (Entity Texture Features)...');
         const res = await axios.get(etfUrl, { responseType: 'stream' });
         const writer = fs.createWriteStream(etfPath);
         res.data.pipe(writer);
-        await new Promise((resolve) => writer.on('finish', resolve));
+        await new Promise((resolve) => writer.on('finish', () => resolve(true)));
       }
     } catch (e) {
       if (onLog) onLog('[CosmeticsEngine] Error descargando mods EMF/ETF: ' + e);
