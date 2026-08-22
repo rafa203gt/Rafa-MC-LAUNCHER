@@ -179,19 +179,22 @@ export class CosmeticsAgentManager {
         if (match) {
           try {
             const list: string[] = JSON.parse(match[1]);
-            if (!list.includes(packName)) {
-              list.unshift(packName); // Ponerlo prioritario
-              content = content.replace(/resourcePacks:\[.*?\]/, `resourcePacks:${JSON.stringify(list)}`);
-              fs.writeFileSync(optionsPath, content, 'utf-8');
+            if (!list.includes('vanilla')) {
+              list.push('vanilla');
             }
+            if (!list.includes(packName)) {
+              list.unshift(packName); // Ponerlo prioritario sobre vanilla
+            }
+            content = content.replace(/resourcePacks:\[.*?\]/, `resourcePacks:${JSON.stringify(list)}`);
+            fs.writeFileSync(optionsPath, content, 'utf-8');
           } catch {
             // Reemplazar si el parseo JSON falló
-            content = content.replace(/resourcePacks:.*?\n/, `resourcePacks:["vanilla",${JSON.stringify(packName)}]\n`);
+            content = content.replace(/resourcePacks:.*?\n/, `resourcePacks:[${JSON.stringify(packName)},"vanilla"]\n`);
             fs.writeFileSync(optionsPath, content, 'utf-8');
           }
         }
       } else {
-        content += `\nresourcePacks:["vanilla",${JSON.stringify(packName)}]\n`;
+        content += `\nresourcePacks:[${JSON.stringify(packName)},"vanilla"]\n`;
         fs.writeFileSync(optionsPath, content, 'utf-8');
       }
     } catch (err) {
