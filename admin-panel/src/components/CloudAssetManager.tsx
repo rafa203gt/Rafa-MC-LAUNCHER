@@ -575,18 +575,33 @@ export const CloudAssetManager: React.FC = () => {
 
     try {
       const id = newShaderName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const fileName = newShaderFile || `${id}.zip`;
       const { error } = await supabase.from('shaderpacks').insert({
         id: `${id}-${Date.now().toString().slice(-4)}`,
         name: newShaderName,
         description: newShaderDesc || 'Shaderpack personalizado',
         performance_tier: newShaderTier,
         download_url: newShaderUrl,
-        file_name: newShaderFile || `${id}.zip`,
+        file_name: fileName,
         file_size: 15000000,
         is_active: true
       });
 
       if (error) throw error;
+
+      if (selectedInstance) {
+        await supabase.from('modpack_mods').insert({
+          instance_id: selectedInstance.id,
+          mod_name: newShaderName,
+          file_name: fileName,
+          file_path: `shaderpacks/${fileName}`,
+          file_size: 15000000,
+          sha1: '',
+          download_url: newShaderUrl,
+          is_enabled: true,
+          category: 'shaders'
+        });
+      }
       alert('✅ Shaderpack registrado con éxito');
       setIsAddingShaderModal(false);
       setNewShaderName('');
