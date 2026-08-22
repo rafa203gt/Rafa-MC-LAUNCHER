@@ -13,6 +13,7 @@
     "publish-pack": "node scripts/publish-modpack.js",
     "sync-mod": "node scripts/update-single-mod.js",
     "release:app": "node scripts/release-app.js",
+    "security:check": "node scripts/security-check.js",
     "admin": "npm --prefix admin-panel run dev",
     "admin:build": "npm --prefix admin-panel run build"
   },

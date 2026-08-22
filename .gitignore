@@ -1,5 +1,51 @@
-# Logs
-logs
+# ==========================================
+# 🛡️ SECURITY & PRIVATE DATA PROTECTION
+# ==========================================
+# Environment variables & secret files
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.secrets
+*.key
+*.pem
+*.cert
+*.crt
+*.pfx
+*.p12
+*.keystore
+*.jks
+credentials.json
+service-account*.json
+tokens.json
+token.json
+auth.json
+*.token
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# Supabase / Vercel / Cloud CLI temp & state
+.supabase
+supabase/.temp
+.vercel
+.netlify
+
+# ==========================================
+# 📦 BUILD & RUNTIME DIRECTORIES
+# ==========================================
+node_modules/
+dist/
+dist-electron/
+dist-ssr/
+release/
+
+# ==========================================
+# 📝 LOGS & DEBUGGING
+# ==========================================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,30 +53,28 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-electron
-release
-*.local
-
-# Editor directories and files
+# ==========================================
+# 💻 OS & IDE TEMPORARY FILES
+# ==========================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Modpack builder local test files
+# ==========================================
+# 🎮 MINECRAFT MODPACK LOCAL BINARIES
+# ==========================================
 modpack/mods/*.jar
 modpack/*.zip
 modpack/*.rar
+modpack/*.7z
 !modpack/mods/.gitkeep
+
