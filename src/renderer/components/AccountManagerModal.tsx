@@ -189,7 +189,9 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
                   accounts.map((acc) => {
                     const isSelected = acc.active;
                     const avatarUrl =
-                      acc.skinUrl || `https://minotar.net/helm/${encodeURIComponent(acc.username)}/64.png`;
+                      acc.type === 'microsoft' && acc.uuid
+                        ? `https://mc-heads.net/avatar/${encodeURIComponent(acc.uuid)}/64`
+                        : `https://mc-heads.net/avatar/${encodeURIComponent(acc.username)}/64`;
 
                     return (
                       <div

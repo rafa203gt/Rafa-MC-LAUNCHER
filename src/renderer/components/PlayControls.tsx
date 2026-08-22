@@ -67,7 +67,9 @@ export const PlayControls: React.FC<PlayControlsProps> = ({
 
   const currentUsername = username.trim() || 'Steve';
   const avatarUrl =
-    activeAccount?.skinUrl || `https://minotar.net/helm/${encodeURIComponent(currentUsername)}/64.png`;
+    activeAccount?.type === 'microsoft' && activeAccount?.uuid
+      ? `https://mc-heads.net/avatar/${encodeURIComponent(activeAccount.uuid)}/64`
+      : `https://mc-heads.net/avatar/${encodeURIComponent(currentUsername)}/64`;
 
   const isAtm10 = activeInstance?.id === 'atm10';
   const isVanilla = activeInstance?.modLoader === 'vanilla';
