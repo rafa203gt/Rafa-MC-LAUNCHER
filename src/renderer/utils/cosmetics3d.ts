@@ -21,6 +21,12 @@ export class Cosmetics3DRenderer {
   private wingRightTip: THREE.Object3D | null = null;
   private haloMesh: THREE.Object3D | null = null;
 
+  // Partículas de Vacío (Lunar Client Void effect)
+  private hasVoidParticles: boolean = false;
+  private voidParticles: { mesh: THREE.Mesh; life: number; maxLife: number; velocity: THREE.Vector3 }[] = [];
+  private particleGeo: THREE.BufferGeometry | null = null;
+  private particleMat: THREE.Material | null = null;
+
   constructor(viewer: SkinViewer) {
     this.viewer = viewer;
     this.startAnimationLoop();
@@ -54,6 +60,52 @@ export class Cosmetics3DRenderer {
         }
       }
 
+      // Sistema de Partículas de Vacío/Ender
+      if (this.hasVoidParticles && this.wingLeftTip && this.wingRightTip) {
+        if (!this.particleGeo) {
+          this.particleGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+          this.particleMat = new THREE.MeshBasicMaterial({ color: 0x6b21a8, transparent: true, opacity: 0.8 });
+        }
+
+        // Emitir partículas periódicamente desde las garras de las alas
+        if (Math.random() < 0.25) {
+          const isLeft = Math.random() > 0.5;
+          const sourceTip = isLeft ? this.wingLeftTip : this.wingRightTip;
+          
+          const target = new THREE.Vector3();
+          sourceTip.getWorldPosition(target);
+
+          const particle = new THREE.Mesh(this.particleGeo, this.particleMat!.clone());
+          particle.position.copy(target);
+          particle.position.x += (Math.random() - 0.5) * 1.5;
+          particle.position.y += (Math.random() - 0.5) * 1.5 - 1.0;
+          particle.position.z += (Math.random() - 0.5) * 1.5;
+          
+          this.viewer.scene.add(particle);
+          this.voidParticles.push({
+            mesh: particle,
+            life: 0,
+            maxLife: 30 + Math.random() * 20,
+            velocity: new THREE.Vector3((Math.random() - 0.5) * 0.06, -Math.random() * 0.1 - 0.03, (Math.random() - 0.5) * 0.06)
+          });
+        }
+      }
+
+      // Actualizar gravedad y opacidad de partículas
+      for (let i = this.voidParticles.length - 1; i >= 0; i--) {
+        const p = this.voidParticles[i];
+        p.life++;
+        p.mesh.position.add(p.velocity);
+        // Fade out
+        (p.mesh.material as THREE.Material).opacity = Math.max(0, 1 - (p.life / p.maxLife));
+        
+        if (p.life >= p.maxLife) {
+          this.viewer.scene.remove(p.mesh);
+          (p.mesh.material as THREE.Material).dispose();
+          this.voidParticles.splice(i, 1);
+        }
+      }
+
       // Animar rotación suave del Halo 3D si está presente
       if (this.haloMesh) {
         this.haloMesh.rotation.y += 0.02;
@@ -68,9 +120,7 @@ export class Cosmetics3DRenderer {
 
   public clearAllCosmetics() {
     for (const obj of this.attachedObjects) {
-      if (obj.parent) {
-        obj.parent.remove(obj);
-      }
+      if (obj.parent) obj.parent.remove(obj);
     }
     this.attachedObjects = [];
     this.wingLeft = null;
@@ -78,6 +128,14 @@ export class Cosmetics3DRenderer {
     this.wingLeftTip = null;
     this.wingRightTip = null;
     this.haloMesh = null;
+    this.hasVoidParticles = false;
+
+    // Limpiar partículas en pantalla
+    for (const p of this.voidParticles) {
+      this.viewer.scene.remove(p.mesh);
+      if (p.mesh.material) (p.mesh.material as THREE.Material).dispose();
+    }
+    this.voidParticles = [];
     this.viewer.resetCape();
   }
 
@@ -175,6 +233,9 @@ export class Cosmetics3DRenderer {
     const boneColor = isBlackDragon ? 0x14141c : isAngel ? 0xfef08a : isMecha ? 0x0f172a : 0x1c1917;
     const clawColor = isBlackDragon ? 0x08080d : isAngel ? 0xffffff : isMecha ? 0x00ffff : 0x0a0a0a;
     const membraneColor = isBlackDragon ? 0x21212d : isAngel ? 0xf8fafc : isMecha ? 0x0284c7 : 0x27272a;
+
+    // Habilitar sistema de partículas para alas oscuras/de dragón
+    this.hasVoidParticles = isBlackDragon;
 
     const boneMat = new THREE.MeshBasicMaterial({ color: boneColor });
     const clawMat = new THREE.MeshBasicMaterial({ color: clawColor });
