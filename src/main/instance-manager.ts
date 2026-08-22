@@ -209,11 +209,14 @@ export class InstanceManager {
   public async syncRemoteInstances(): Promise<MinecraftInstance[]> {
     try {
       const { remoteConfigManager } = await import('./remote-config');
-      const remoteList = await remoteConfigManager.fetchRemoteInstances();
+      const { active: remoteList, allRemoteIds } = await remoteConfigManager.fetchRemoteInstances();
 
       if (remoteList && remoteList.length > 0) {
         const localList = this.getInstances();
-        const customLocal = localList.filter((l) => !l.isDefault && !remoteList.some((r) => r.id === l.id));
+        // Keep only truly custom local instances that never belonged to Supabase
+        const customLocal = localList.filter(
+          (l) => (l as any).isLocalOnly || (!allRemoteIds.includes(l.id) && !l.isDefault && l.id.includes('-'))
+        );
 
         const merged: MinecraftInstance[] = remoteList.map((r) => ({
           id: r.id,

@@ -219,28 +219,32 @@ export class RemoteConfigManager {
     return this.cachedNews;
   }
 
-  public async fetchRemoteInstances(): Promise<any[]> {
-    if (!this.supabase) return [];
+  public async fetchRemoteInstances(): Promise<{ active: any[]; allRemoteIds: string[] }> {
+    if (!this.supabase) return { active: [], allRemoteIds: [] };
     try {
       let { data, error } = await this.supabase
         .from('instances')
         .select('*')
-        .eq('is_active', true)
         .order('is_default', { ascending: false });
 
       if (error || !data || data.length === 0) {
         const alt = await this.supabase
           .from('remote_instances')
           .select('*')
-          .eq('is_active', true)
           .order('is_default', { ascending: false });
         if (!alt.error && alt.data && alt.data.length > 0) {
           data = alt.data;
         }
       }
-      return data || [];
+
+      if (data && data.length > 0) {
+        const active = data.filter((i) => i.is_active === true || i.is_active === 'true' || i.is_active === undefined);
+        const allRemoteIds = data.map((i) => i.id);
+        return { active, allRemoteIds };
+      }
+      return { active: [], allRemoteIds: [] };
     } catch {
-      return [];
+      return { active: [], allRemoteIds: [] };
     }
   }
 

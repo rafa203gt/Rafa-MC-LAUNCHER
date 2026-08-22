@@ -101,7 +101,8 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
     try {
       const nextState = !inst.is_active;
       await executeDbQuery((tbl) => supabase.from(tbl).update({ is_active: nextState, updated_at: new Date().toISOString() }).eq('id', inst.id));
-      setToast(nextState ? `🟢 "${inst.name}" activada` : `⚪ "${inst.name}" desactivada`);
+      await supabase.from('launcher_config').update({ updated_at: new Date().toISOString() }).eq('id', 'global');
+      setToast(nextState ? `🟢 "${inst.name}" activada y visible` : `⚪ "${inst.name}" desactivada (oculta)`);
       setTimeout(() => setToast(null), 3000);
       onRefresh();
     } catch (err: any) {
