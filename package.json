@@ -1,6 +1,6 @@
 {
   "name": "rafa-mc-launcher",
-  "version": "1.0.17",
+  "version": "1.0.19",
   "description": "Custom Minecraft Launcher with Auto-Modpack Sync and No-Premium support",
   "main": "dist-electron/main.js",
   "type": "module",
@@ -12,7 +12,9 @@
     "pack-builder": "node scripts/build-manifest.js",
     "publish-pack": "node scripts/publish-modpack.js",
     "sync-mod": "node scripts/update-single-mod.js",
-    "release:app": "node scripts/release-app.js"
+    "release:app": "node scripts/release-app.js",
+    "admin": "npm --prefix admin-panel run dev",
+    "admin:build": "npm --prefix admin-panel run build"
   },
   "keywords": [
     "minecraft",
@@ -25,6 +27,7 @@
   "author": "rafa203gt",
   "license": "MIT",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.9",
     "clsx": "^2.1.1",
@@ -33,13 +36,15 @@
     "minecraft-server-util": "^5.4.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^3.0.1"
+    "tailwind-merge": "^3.0.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.17.19",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "electron": "^29.4.6",

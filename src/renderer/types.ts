@@ -88,6 +88,36 @@ export interface MinecraftInstance {
   lastPlayed?: string;
 }
 
+export interface RemoteLauncherConfig {
+  id: string;
+  server_name: string;
+  server_ip: string;
+  server_port: number;
+  auto_connect: boolean;
+  minecraft_version: string;
+  mod_loader: string;
+  mod_loader_version: string;
+  modpack_manifest_url: string;
+  news_feed_url: string;
+  maintenance_mode: boolean;
+  maintenance_message: string;
+  banner_alert: string | null;
+  banner_alert_type: 'info' | 'warning' | 'error' | 'success';
+  discord_url: string;
+  min_launcher_version: string;
+}
+
+export interface NewsAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  category: 'update' | 'event' | 'server' | 'maintenance';
+  image_url?: string;
+  pinned: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface LauncherAPI {
   launchGame: (options: { username: string; minRam?: number; maxRam?: number; autoConnect?: boolean }) => Promise<void>;
   getSettings: () => Promise<AppSettings>;
@@ -102,6 +132,10 @@ export interface LauncherAPI {
   switchInstance: (instanceId: string) => Promise<MinecraftInstance>;
   createInstance: (data: Partial<MinecraftInstance>) => Promise<MinecraftInstance>;
   deleteInstance: (instanceId: string) => Promise<boolean>;
+  getRemoteConfig: () => Promise<RemoteLauncherConfig | null>;
+  getNews: () => Promise<NewsAnnouncement[]>;
+  onRemoteConfig: (callback: (config: RemoteLauncherConfig) => void) => () => void;
+  onRemoteNews: (callback: (news: NewsAnnouncement[]) => void) => () => void;
   checkForUpdates: () => Promise<AppUpdateInfo>;
   downloadAppUpdate: (downloadUrl: string, fileName: string) => Promise<void>;
   onUpdateProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void;

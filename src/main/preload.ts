@@ -23,6 +23,20 @@ export const API = {
   createInstance: (data: any) => ipcRenderer.invoke('instances:create', data),
   deleteInstance: (instanceId: string) => ipcRenderer.invoke('instances:delete', instanceId),
 
+  // Remote Live Config & News (Supabase)
+  getRemoteConfig: () => ipcRenderer.invoke('remote:config'),
+  getNews: () => ipcRenderer.invoke('remote:news'),
+  onRemoteConfig: (callback: (config: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('remote:config-updated', handler);
+    return () => ipcRenderer.removeListener('remote:config-updated', handler);
+  },
+  onRemoteNews: (callback: (news: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('remote:news-updated', handler);
+    return () => ipcRenderer.removeListener('remote:news-updated', handler);
+  },
+
   // Window Controls
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),

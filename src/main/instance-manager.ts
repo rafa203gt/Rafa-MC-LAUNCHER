@@ -204,6 +204,42 @@ export class InstanceManager {
     return true;
   }
 
+  public async syncRemoteInstances(): Promise<MinecraftInstance[]> {
+    try {
+      const { remoteConfigManager } = await import('./remote-config');
+      const remoteList = await remoteConfigManager.fetchRemoteInstances();
+
+      if (remoteList && remoteList.length > 0) {
+        const localList = this.getInstances();
+        const customLocal = localList.filter((l) => !l.isDefault && !remoteList.some((r) => r.id === l.id));
+
+        const merged: MinecraftInstance[] = remoteList.map((r) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description || '',
+          minecraftVersion: r.minecraft_version || '1.21.1',
+          modLoader: r.mod_loader || 'neoforge',
+          modLoaderVersion: r.mod_loader_version || '',
+          modpackManifestUrl: r.modpack_manifest_url || '',
+          serverIp: r.server_ip,
+          serverPort: r.server_port,
+          customRam: r.custom_ram || 4096,
+          icon: r.icon || 'flame',
+          bannerUrl: r.banner_url,
+          isDefault: r.is_default || r.id === 'atm10',
+          isActive: r.id === this.activeInstanceId,
+          createdAt: r.created_at || new Date().toISOString()
+        }));
+
+        this.cachedInstances = [...merged, ...customLocal];
+        this.save();
+      }
+    } catch (err: any) {
+      console.warn('[InstanceManager] Error sincronizando instancias remotas:', err.message);
+    }
+    return this.getInstances();
+  }
+
   private save(): void {
     if (this.cachedInstances) {
       fs.writeFileSync(this.instancesFile, JSON.stringify(this.cachedInstances, null, 2), 'utf-8');

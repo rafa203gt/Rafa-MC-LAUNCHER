@@ -9,6 +9,7 @@ import { serverPinger } from './server-pinger';
 import { minecraftLauncher } from './launcher';
 import { appUpdater } from './app-updater';
 import { instanceManager } from './instance-manager';
+import { remoteConfigManager } from './remote-config';
 
 // Global error handlers to prevent sudden crashes
 process.on('uncaughtException', (err) => {
@@ -76,6 +77,9 @@ app.whenReady().then(() => {
   // Auto-cleanup any older executable versions in user directory
   appUpdater.cleanupOldVersions();
 
+  // Initialize Supabase Realtime live sync
+  remoteConfigManager.initRealtime(() => mainWindow);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -128,7 +132,7 @@ ipcMain.handle('modpack:installed-mods', async () => {
 
 // 4. Instance Manager IPC Handlers
 ipcMain.handle('instances:list', async () => {
-  return instanceManager.getInstances();
+  return instanceManager.syncRemoteInstances();
 });
 
 ipcMain.handle('instances:active', async () => {
@@ -164,6 +168,16 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
       }
     },
     (code) => {
+      if (code !== 0 && code !== null) {
+        const settings = configStore.getSettings();
+        remoteConfigManager.reportCrash({
+          username: options.username || 'Jugador',
+          minecraftVersion: settings.minecraftVersion,
+          launcherVersion: app.getVersion(),
+          ramAllocated: options.maxRam || settings.maxRam,
+          errorMessage: `El proceso de Minecraft finalizó con código de error ${code}`
+        });
+      }
       if (mainWindow) {
         mainWindow.webContents.send('launcher:closed', code);
       }
@@ -209,6 +223,15 @@ ipcMain.handle('updater:download', async (_event, downloadUrl: string, fileName:
       mainWindow.webContents.send('updater:progress', progress);
     }
   });
+});
+
+// 7. Remote Live Config & News (Supabase)
+ipcMain.handle('remote:config', async () => {
+  return remoteConfigManager.fetchRemoteConfig();
+});
+
+ipcMain.handle('remote:news', async () => {
+  return remoteConfigManager.fetchNews();
 });
 
 // 7. Window Controls

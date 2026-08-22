@@ -1,0 +1,262 @@
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { BrowserWindow } from 'electron';
+import WebSocket from 'ws';
+
+// Polyfill globalThis.WebSocket for Electron Node.js environment
+if (typeof (globalThis as any).WebSocket === 'undefined') {
+  (globalThis as any).WebSocket = WebSocket;
+}
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+export interface RemoteLauncherConfig {
+  id: string;
+  server_name: string;
+  server_ip: string;
+  server_port: number;
+  auto_connect: boolean;
+  minecraft_version: string;
+  mod_loader: string;
+  mod_loader_version: string;
+  modpack_manifest_url: string;
+  news_feed_url: string;
+  maintenance_mode: boolean;
+  maintenance_message: string;
+  banner_alert: string | null;
+  banner_alert_type: 'info' | 'warning' | 'error' | 'success';
+  discord_url: string;
+  min_launcher_version: string;
+}
+
+export interface NewsAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  category: 'update' | 'event' | 'server' | 'maintenance';
+  image_url?: string;
+  pinned: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export class RemoteConfigManager {
+  private supabase: SupabaseClient | null = null;
+  private channel: RealtimeChannel | null = null;
+  private cachedConfig: RemoteLauncherConfig | null = null;
+  private cachedNews: NewsAnnouncement[] = [];
+  private getMainWindow: (() => BrowserWindow | null) | null = null;
+
+  constructor() {
+    try {
+      this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: false }
+      });
+    } catch (err: any) {
+      console.warn(`[RemoteConfig] No se pudo inicializar Supabase client: ${err.message}`);
+    }
+  }
+
+  public initRealtime(getMainWindow: () => BrowserWindow | null): void {
+    this.getMainWindow = getMainWindow;
+
+    // 1. Initial fetch
+    this.fetchRemoteConfig().then((cfg) => {
+      if (cfg) this.broadcastConfig(cfg);
+    });
+    this.fetchNews().then((news) => {
+      this.broadcastNews(news);
+    });
+
+    if (!this.supabase) return;
+
+    // 2. Realtime WebSocket Listener
+    try {
+      this.channel = this.supabase
+        .channel('launcher-client-live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'launcher_config' },
+          (payload) => {
+            console.log('[RemoteConfig] ⚡ Cambio en vivo recibido de Supabase Realtime!');
+            if (payload.new) {
+              this.cachedConfig = payload.new as RemoteLauncherConfig;
+              this.broadcastConfig(this.cachedConfig);
+            } else {
+              this.fetchRemoteConfig().then((cfg) => {
+                if (cfg) this.broadcastConfig(cfg);
+              });
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'news_announcements' },
+          () => {
+            console.log('[RemoteConfig] 📰 Actualización de noticias recibida de Supabase!');
+            this.fetchNews().then((news) => {
+              this.broadcastNews(news);
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log(`[RemoteConfig] Estado de conexión Supabase Realtime: ${status}`);
+        });
+    } catch (err: any) {
+      console.warn(`[RemoteConfig] Error iniciando Realtime: ${err.message}`);
+    }
+
+    // 3. Fallback Periodic Polling every 10 seconds
+    setInterval(async () => {
+      try {
+        const cfg = await this.fetchRemoteConfig();
+        if (cfg) this.broadcastConfig(cfg);
+        const news = await this.fetchNews();
+        this.broadcastNews(news);
+      } catch {}
+    }, 10000);
+  }
+
+  private broadcastConfig(config: RemoteLauncherConfig): void {
+    try {
+      const win = this.getMainWindow?.();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('remote:config-updated', config);
+      }
+    } catch {}
+  }
+
+  private broadcastNews(news: NewsAnnouncement[]): void {
+    try {
+      const win = this.getMainWindow?.();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('remote:news-updated', news);
+      }
+    } catch {}
+  }
+
+  public async fetchRemoteConfig(): Promise<RemoteLauncherConfig | null> {
+    if (!this.supabase) return this.cachedConfig;
+    try {
+      const { data, error } = await this.supabase
+        .from('launcher_config')
+        .select('*')
+        .eq('id', 'global')
+        .single();
+
+      if (error) {
+        return this.cachedConfig;
+      }
+
+      if (data) {
+        this.cachedConfig = data as RemoteLauncherConfig;
+        return this.cachedConfig;
+      }
+    } catch {
+      // Fallback to cache silently
+    }
+    return this.cachedConfig;
+  }
+
+  public async fetchNews(): Promise<NewsAnnouncement[]> {
+    if (!this.supabase) return this.cachedNews;
+    try {
+      const { data, error } = await this.supabase
+        .from('news_announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        return this.cachedNews;
+      }
+
+      if (data) {
+        this.cachedNews = data as NewsAnnouncement[];
+        return this.cachedNews;
+      }
+    } catch {
+      // Fallback
+    }
+    return this.cachedNews;
+  }
+
+  public async fetchRemoteInstances(): Promise<any[]> {
+    if (!this.supabase) return [];
+    try {
+      const { data, error } = await this.supabase
+        .from('instances')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_default', { ascending: false });
+
+      if (error) {
+        console.warn(`[RemoteConfig] Error obteniendo instancias remotas: ${error.message}`);
+        return [];
+      }
+      return data || [];
+    } catch {
+      return [];
+    }
+  }
+
+  public async fetchRemoteMods(instanceId: string = 'atm10'): Promise<any[]> {
+    if (!this.supabase) return [];
+    try {
+      const { data, error } = await this.supabase
+        .from('modpack_mods')
+        .select('*')
+        .eq('instance_id', instanceId)
+        .eq('is_enabled', true);
+
+      if (error) {
+        console.warn(`[RemoteConfig] Error obteniendo mods remotos para ${instanceId}: ${error.message}`);
+        return [];
+      }
+      return data || [];
+    } catch {
+      return [];
+    }
+  }
+
+  public async reportCrash(data: {
+    username: string;
+    minecraftVersion: string;
+    launcherVersion: string;
+    ramAllocated: number;
+    errorMessage?: string;
+    crashLog?: string;
+  }): Promise<boolean> {
+    if (!this.supabase) return false;
+    try {
+      const { error } = await this.supabase.from('crash_reports').insert({
+        username: data.username || 'Jugador',
+        minecraft_version: data.minecraftVersion || '1.21.1',
+        launcher_version: data.launcherVersion || '1.0.0',
+        ram_allocated: data.ramAllocated || 4096,
+        os_info: `${process.platform} ${process.arch}`,
+        error_message: data.errorMessage || 'Minecraft finalizó de forma inesperada.',
+        crash_log: data.crashLog || '',
+        resolved: false
+      });
+      if (error) {
+        console.warn(`[RemoteConfig] Error reportando crash a Supabase: ${error.message}`);
+        return false;
+      }
+      console.log('[RemoteConfig] 🐞 Reporte de crash enviado con éxito a Supabase');
+      return true;
+    } catch (err: any) {
+      console.warn(`[RemoteConfig] No se pudo enviar reporte de crash: ${err.message}`);
+      return false;
+    }
+  }
+
+  public getCachedConfig(): RemoteLauncherConfig | null {
+    return this.cachedConfig;
+  }
+}
+
+export const remoteConfigManager = new RemoteConfigManager();
+

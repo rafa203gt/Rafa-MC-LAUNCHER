@@ -7,6 +7,7 @@ import axios from 'axios';
 import { createRequire } from 'node:module';
 import { configStore } from './config-store';
 import { ProgressTracker } from './progress-tracker';
+import { remoteConfigManager } from './remote-config';
 
 const require = createRequire(import.meta.url);
 const AdmZip = require('adm-zip');
@@ -70,18 +71,50 @@ export class ModSynchronizer {
     return crypto.createHash('sha1').update(fileBuffer).digest('hex').toLowerCase();
   }
 
-  public async fetchManifest(manifestUrl: string): Promise<ModpackManifest | null> {
+  public async fetchManifest(manifestUrl: string, instanceId?: string): Promise<ModpackManifest | null> {
     if (!manifestUrl || manifestUrl.trim() === '') return null;
+    let manifest: ModpackManifest | null = null;
     try {
       const response = await axios.get<ModpackManifest>(manifestUrl, {
         timeout: 10000,
         headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'Rafa-MC-Launcher' }
       });
-      return response.data;
+      manifest = response.data;
     } catch (err: any) {
       console.warn(`[ModSync] No se pudo obtener el manifiesto remoto (${manifestUrl}):`, err.message);
-      return null;
     }
+
+    // Dynamic overlay from Supabase modpack_mods table for the target instance
+    try {
+      const { instanceManager } = await import('./instance-manager');
+      const targetInstanceId = instanceId || instanceManager.getActiveInstanceId() || 'atm10';
+      const remoteMods = await remoteConfigManager.fetchRemoteMods(targetInstanceId);
+
+      if (remoteMods && remoteMods.length > 0) {
+        if (!manifest) {
+          manifest = {
+            name: 'Modpack Sincronizado',
+            version: '1.0.0',
+            minecraftVersion: '1.21.1',
+            modLoader: 'neoforge',
+            modLoaderVersion: '21.1.247',
+            files: []
+          };
+        }
+        const nonModFiles = (manifest.files || []).filter((f) => !f.path.startsWith('mods/'));
+        const dynamicModFiles: ModpackFile[] = remoteMods.map((rm) => ({
+          path: rm.file_path || `mods/${rm.file_name}`,
+          sha1: rm.sha1 || '',
+          size: Number(rm.file_size) || 0,
+          downloadUrl: rm.download_url || ''
+        }));
+        manifest.files = [...nonModFiles, ...dynamicModFiles];
+      }
+    } catch (err: any) {
+      console.warn('[ModSync] Error integrando mods dinámicos de Supabase:', err.message);
+    }
+
+    return manifest;
   }
 
   public async reinstallModpack(
