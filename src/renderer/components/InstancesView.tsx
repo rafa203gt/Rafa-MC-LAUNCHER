@@ -227,7 +227,7 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
                     </div>
 
                     <div>
-                      Mods: <strong className="text-slate-200">{inst.totalMods ?? (inst.modLoader === 'vanilla' ? 0 : '470+')}</strong>
+                      Mods: <strong className="text-slate-200">{inst.totalMods !== undefined ? inst.totalMods : inst.id === 'atm10' ? 479 : inst.modLoader === 'vanilla' ? 0 : 0}</strong>
                     </div>
                   </div>
 
