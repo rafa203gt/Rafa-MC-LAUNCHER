@@ -829,6 +829,31 @@ export const CloudAssetManager: React.FC = () => {
     }
   };
 
+  // Delete current instance with full cascade and realtime notification
+  const handleDeleteCurrentInstance = async () => {
+    if (!selectedInstance) return;
+    if (selectedInstance.id === 'atm10' || selectedInstance.is_default) {
+      alert('La instancia principal por defecto no se puede eliminar.');
+      return;
+    }
+    if (!confirm(`¿Estás seguro de eliminar permanentemente la instancia "${selectedInstance.name}" (${selectedInstance.id}) y todos sus mods, configs y shaders?`)) return;
+
+    try {
+      setIsLoading(true);
+      await supabase.from('instances').delete().eq('id', selectedInstance.id);
+      await supabase.from('remote_instances').delete().eq('id', selectedInstance.id);
+      await supabase.from('modpack_mods').delete().eq('instance_id', selectedInstance.id);
+      await supabase.from('shaderpacks').delete().eq('instance_id', selectedInstance.id);
+      await supabase.from('launcher_config').update({ updated_at: new Date().toISOString() }).eq('id', 'global');
+      alert(`🗑️ Instancia "${selectedInstance.name}" eliminada por completo.`);
+      await loadInstances();
+    } catch (err: any) {
+      alert(`Error al eliminar instancia: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const filteredMods = mods.filter(
     (m) =>
       m.mod_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -860,6 +885,18 @@ export const CloudAssetManager: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {selectedInstance && !selectedInstance.is_default && selectedInstance.id !== 'atm10' && (
+              <button
+                onClick={handleDeleteCurrentInstance}
+                disabled={isLoading}
+                className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                title="Eliminar permanentemente este modpack y todos sus archivos"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Eliminar Instancia
+              </button>
+            )}
+
             <button
               onClick={handleCloneInstance}
               className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all"

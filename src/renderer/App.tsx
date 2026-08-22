@@ -189,8 +189,10 @@ export const App: React.FC = () => {
       console.log('[Renderer] 📦 Lista de instancias sincronizada en vivo:', list);
       if (list && list.length > 0) {
         setInstances(list);
-        const active = list.find((i) => i.isActive) || list[0];
-        if (active) setActiveInstance(active);
+        setActiveInstance((currentActive) => {
+          const exists = list.find((i) => i.id === currentActive?.id);
+          return exists || list.find((i) => i.isDefault) || list[0];
+        });
       }
     });
 

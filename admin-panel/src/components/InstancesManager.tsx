@@ -154,14 +154,19 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
   };
 
   const handleDelete = async (inst: RemoteInstance) => {
-    if (inst.is_default) {
+    if (inst.is_default || inst.id === 'atm10') {
       alert('La instancia por defecto no se puede eliminar.');
       return;
     }
-    if (!confirm(`¿Estás seguro de eliminar la instancia "${inst.name}" y desvincular sus mods?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar la instancia "${inst.name}" y todos sus mods/configs asociados?`)) return;
 
     try {
       await executeDbQuery((tbl) => supabase.from(tbl).delete().eq('id', inst.id));
+      await supabase.from('modpack_mods').delete().eq('instance_id', inst.id);
+      await supabase.from('shaderpacks').delete().eq('instance_id', inst.id);
+      await supabase.from('launcher_config').update({ updated_at: new Date().toISOString() }).eq('id', 'global');
+      setToast(`🗑️ Instancia "${inst.name}" eliminada.`);
+      setTimeout(() => setToast(null), 3000);
       onRefresh();
     } catch (err: any) {
       alert(`Error: ${err.message}`);

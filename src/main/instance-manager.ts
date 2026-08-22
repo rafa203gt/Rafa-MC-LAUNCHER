@@ -167,6 +167,7 @@ export class InstanceManager {
       totalMods: 0,
       isDefault: false,
       isActive: false,
+      isLocalOnly: true,
       createdAt: new Date().toISOString()
     };
 
@@ -209,14 +210,12 @@ export class InstanceManager {
   public async syncRemoteInstances(): Promise<MinecraftInstance[]> {
     try {
       const { remoteConfigManager } = await import('./remote-config');
-      const { active: remoteList, allRemoteIds } = await remoteConfigManager.fetchRemoteInstances();
+      const { active: remoteList } = await remoteConfigManager.fetchRemoteInstances();
 
       if (remoteList && remoteList.length > 0) {
         const localList = this.getInstances();
-        // Keep only truly custom local instances that never belonged to Supabase
-        const customLocal = localList.filter(
-          (l) => (l as any).isLocalOnly || (!allRemoteIds.includes(l.id) && !l.isDefault && l.id.includes('-'))
-        );
+        // Keep strictly user-created local-only instances (never remote instances)
+        const customLocal = localList.filter((l) => (l as any).isLocalOnly === true);
 
         const merged: MinecraftInstance[] = remoteList.map((r) => ({
           id: r.id,
@@ -237,10 +236,14 @@ export class InstanceManager {
         }));
 
         this.cachedInstances = [...merged, ...customLocal];
-        if (!this.cachedInstances.some((i) => i.isActive) && this.cachedInstances.length > 0) {
+        
+        // If active instance is no longer present in the synced instances, reset to default
+        if (!this.cachedInstances.some((i) => i.id === this.activeInstanceId)) {
           const def = this.cachedInstances.find((i) => i.isDefault) || this.cachedInstances[0];
-          def.isActive = true;
-          this.activeInstanceId = def.id;
+          if (def) {
+            def.isActive = true;
+            this.activeInstanceId = def.id;
+          }
         }
         this.save();
       }
