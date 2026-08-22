@@ -157,14 +157,13 @@ async function main() {
   const releaseDescription = `## 🚀 Rafa MC Launcher ${tag}
 
 ### ✨ Novedades y Mejoras en esta Versión:
-- 🛠️ **Actualizador del Instalador de Windows (Setup.exe):** Soporte de elevación de permisos UAC mediante \`ShellExecuteExW\` y liberación forzada de procesos antiguos para una instalación limpia e interactiva.
-- ⚡ **Descarga Ultra-Rápida de Actualizaciones:** Motor de streaming directo con Axios y buffer de 8 MB con medidor de velocidad (\`MB/s\`) y tamaño transferido en vivo.
-- 🎮 **Hero Launch Station & Selector Rápido:** Cambio de instancias de juego (ATM 10, Vanilla, etc.) directamente desde la pantalla principal sin salir de la pestaña.
-- 🧰 **Hub de Herramientas Rápidas (Quick Tools):** Acceso directo en 1 clic a capturas de pantalla (\`screenshots\`), mundos (\`saves\`), mods, registros y reparación.
-- ⛏️ **Instancias Vanilla Multi-Versión:** Descarga automatizada oficial desde Mojang para cualquier versión (1.21.4, 1.20.1, 1.16.5, etc.).
-- 🛡️ **Limpieza Total de Copyright & Avisos Legales:** Uso exclusivo de iconografía vectorial propia y cláusula oficial de Mojang Studios / Microsoft.
+- 🧍 **Visor de Skins 3D Interactivo:** Renderizado 3D del personaje en la pantalla principal con rotación 360° con ratón, balanceo en reposo, descarga automática por nick y subida de skins \`.png\` locales.
+- 🎛️ **Gestor e Instalador de Shaders en 1 Clic:** Catálogo de shaders ultra-optimizados (*Complementary Reimagined*, *BSL Shaders*, *Solas Shaders*, *MakeUp UltraFast*) listos para descargar y activar en tu modpack en 1 segundo.
+- 🎮 **Discord Rich Presence (RPC) Dinámico:** Muestra en tu perfil de Discord qué modpack estás jugando, tiempo de sesión y servidor en vivo (con interruptor en Ajustes).
+- 🛡️ **Seguridad Blindada & Auditoría OWASP:** Aislamiento de procesos en Electron, Row-Level Security (RLS) estricto en Supabase y autenticación criptográfica.
+- ⚡ **Descarga Turbo y Sincronización Multihilo:** Actualizador automático con elevación UAC y gestión de múltiples instancias (*All The Mods 10*, *Vanilla*, etc.).
 
-### 📝 Registro de Cambios Recientes:
+### 📝 Registro de Cambios:
 ${recentCommits}
 
 ---
