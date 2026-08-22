@@ -15,7 +15,8 @@ import {
   Box,
   UserCheck,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Cloud
 } from 'lucide-react';
 import {
   supabase,
