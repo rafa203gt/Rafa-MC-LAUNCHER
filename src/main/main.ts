@@ -227,7 +227,8 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
           minecraftVersion: settings.minecraftVersion,
           launcherVersion: app.getVersion(),
           ramAllocated: options.maxRam || settings.maxRam,
-          errorMessage: `[${diagnosis.type}] ${diagnosis.title}: ${diagnosis.description}`
+          errorMessage: `[${diagnosis.type}] ${diagnosis.title}: ${diagnosis.description}`,
+          crashLog: diagnosis.rawSnippet || diagnosis.solution || ''
         });
 
         if (mainWindow) {
