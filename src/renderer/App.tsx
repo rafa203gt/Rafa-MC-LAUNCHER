@@ -11,7 +11,7 @@ import { InstancesView } from './components/InstancesView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConsoleModal } from './components/ConsoleModal';
 import { ShadersModal } from './components/ShadersModal';
-import { Skin3DViewer } from './components/Skin3DViewer';
+import { SkinsView } from './components/SkinsView';
 import {
   AppSettings,
   ServerStatusResult,
@@ -22,7 +22,7 @@ import {
 } from './types';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'play' | 'instances' | 'mods' | 'settings' | 'console'>('play');
+  const [activeTab, setActiveTab] = useState<'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console'>('play');
   const [activeInstance, setActiveInstance] = useState<MinecraftInstance | null>(null);
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
@@ -312,34 +312,24 @@ export const App: React.FC = () => {
               onRefresh={checkServerStatus}
             />
 
-            {/* Split Grid: Play Controls + 3D Skin Viewer */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              <div className="lg:col-span-2 space-y-6">
-                <PlayControls
-                  username={username}
-                  setUsername={setUsername}
-                  maxRam={settings.maxRam}
-                  onRamChange={handleRamChange}
-                  activeInstance={activeInstance}
-                  instances={instances}
-                  onSwitchInstance={handleSwitchInstance}
-                  isLaunching={isLaunching}
-                  progress={progress}
-                  onLaunch={handleLaunch}
-                />
+            <PlayControls
+              username={username}
+              setUsername={setUsername}
+              maxRam={settings.maxRam}
+              onRamChange={handleRamChange}
+              activeInstance={activeInstance}
+              instances={instances}
+              onSwitchInstance={handleSwitchInstance}
+              isLaunching={isLaunching}
+              progress={progress}
+              onLaunch={handleLaunch}
+            />
 
-                <QuickToolsBar
-                  onReinstallModpack={isModded ? handleReinstallModpack : undefined}
-                  onOpenShaders={() => setIsShadersOpen(true)}
-                  isModded={isModded}
-                />
-              </div>
-
-              {/* 3D Skin Viewer Column */}
-              <div className="flex flex-col items-center justify-center bg-mc-card/60 backdrop-blur-md border border-mc-border/80 rounded-3xl p-4 shadow-xl">
-                <Skin3DViewer username={username} width={220} height={260} />
-              </div>
-            </div>
+            <QuickToolsBar
+              onReinstallModpack={isModded ? handleReinstallModpack : undefined}
+              onOpenShaders={() => setIsShadersOpen(true)}
+              isModded={isModded}
+            />
 
             {/* Live Community News from Supabase */}
             <NewsFeedCard news={news} />
@@ -367,6 +357,16 @@ export const App: React.FC = () => {
           />
         )}
 
+        {activeTab === 'skins' && (
+          <SkinsView
+            currentUsername={username}
+            onUsernameChange={(newUsername) => {
+              setUsername(newUsername);
+              handleSaveSettings({ username: newUsername });
+            }}
+          />
+        )}
+
         {activeTab === 'mods' && <ModpackView />}
 
         {activeTab === 'settings' && (
@@ -387,3 +387,4 @@ export const App: React.FC = () => {
     </div>
   );
 };
+

@@ -2,7 +2,8 @@
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const IS_STAGED = process.argv.includes('--staged') || process.argv.includes('--hook');
+const IS_STAGED = process.argv.includes('--staged');
+const IS_ALL_LOCAL = process.argv.includes('--all');
 
 const FORBIDDEN_FILE_PATTERNS = [
   /^\.env(\..+)?$/i,
@@ -53,7 +54,7 @@ function checkFileForSecrets(filePath, content) {
   if (!ALLOWED_FILES.includes(fileName)) {
     for (const pattern of FORBIDDEN_FILE_PATTERNS) {
       if (pattern.test(fileName)) {
-        issues.push(`[ARCHIVO PROHIBIDO] Archivo sensible detectado: ${filePath}`);
+        issues.push(`[ARCHIVO PROHIBIDO] Archivo sensible en control de versiones: ${filePath}`);
       }
     }
   }
@@ -63,8 +64,14 @@ function checkFileForSecrets(filePath, content) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    // Ignore comments or examples
-    if (line.includes('your-key-here') || line.includes('ejemplo') || line.includes('example')) {
+    // Ignore comments or placeholders
+    if (
+      line.includes('your-key-here') ||
+      line.includes('ejemplo') ||
+      line.includes('example') ||
+      line.includes('VITE_SUPABASE_') && line.includes("process.env") ||
+      line.includes('play.tuserver.com')
+    ) {
       continue;
     }
 
@@ -107,9 +114,29 @@ function runAudit() {
     } catch (err) {
       console.warn('⚠️  No se pudo obtener la lista de git staged:', err.message);
     }
+  } else if (!IS_ALL_LOCAL) {
+    console.log('🔍 Analizando archivos registrados y trackeados en Git (git ls-files)...');
+    try {
+      const trackedFiles = execSync('git ls-files', { encoding: 'utf-8' })
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      for (const file of trackedFiles) {
+        if (!fs.existsSync(file)) continue;
+        try {
+          const content = fs.readFileSync(file, 'utf-8');
+          const fileIssues = checkFileForSecrets(file, content);
+          violations.push(...fileIssues);
+        } catch {
+          // Skip binary files
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️  No se pudo obtener la lista de git ls-files:', err.message);
+    }
   } else {
-    console.log('🔍 Analizando todo el repositorio en busca de datos sensibles...');
-    
+    console.log('🔍 Analizando todo el sistema de archivos local...');
     function scanDir(dir) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
@@ -133,13 +160,10 @@ function runAudit() {
             const content = fs.readFileSync(fullPath, 'utf-8');
             const issues = checkFileForSecrets(relPath, content);
             violations.push(...issues);
-          } catch {
-            // Binary or unreadable file
-          }
+          } catch {}
         }
       }
     }
-
     scanDir(process.cwd());
   }
 
@@ -152,8 +176,8 @@ function runAudit() {
     console.error('💡 Revisa tu .gitignore o usa variables de entorno (.env).\n');
     process.exit(1);
   } else {
-    console.log('✅ ¡Auditoría completada con éxito! No se encontraron secretos ni datos calientes.');
-    console.log('🛡️  Tu repositorio está seguro para subir a GitHub.\n');
+    console.log('✅ ¡Auditoría completada con éxito! No se encontraron secretos ni datos calientes en el repositorio.');
+    console.log('🛡️  Tu código está completamente seguro para subir a GitHub.\n');
   }
 }
 

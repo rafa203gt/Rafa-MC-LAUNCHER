@@ -1,9 +1,9 @@
 import React from 'react';
-import { Minus, Square, X, Gamepad2, Settings, Box, Terminal, Layers } from 'lucide-react';
+import { Minus, Square, X, Gamepad2, Settings, Box, Terminal, Layers, Palette } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'play' | 'instances' | 'mods' | 'settings' | 'console';
-  setActiveTab: (tab: 'play' | 'instances' | 'mods' | 'settings' | 'console') => void;
+  activeTab: 'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console';
+  setActiveTab: (tab: 'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console') => void;
   statusText: string;
   activeInstanceName?: string;
 }
@@ -60,6 +60,18 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusT
         >
           <Layers className="w-3.5 h-3.5 text-cyan-400" />
           Instancias
+        </button>
+
+        <button
+          onClick={() => setActiveTab('skins')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            activeTab === 'skins'
+              ? 'bg-emerald-500 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-mc-card'
+          }`}
+        >
+          <Palette className="w-3.5 h-3.5 text-purple-400" />
+          Skins 3D
         </button>
 
         <button
