@@ -463,8 +463,33 @@ export const CloudAssetManager: React.FC = () => {
           }
         }
       } else if (isRar) {
+        let wasmBinary: ArrayBuffer | undefined = undefined;
+        try {
+          const res = await fetch('/unrar.wasm');
+          if (res.ok) {
+            const buf = await res.arrayBuffer();
+            const u8 = new Uint8Array(buf);
+            if (u8[0] === 0x00 && u8[1] === 0x61 && u8[2] === 0x73 && u8[3] === 0x6d) {
+              wasmBinary = buf;
+            }
+          }
+        } catch {}
+
+        if (!wasmBinary) {
+          try {
+            const cdnRes = await fetch('https://cdn.jsdelivr.net/npm/node-unrar-js@2.0.2/esm/js/unrar.wasm');
+            if (cdnRes.ok) {
+              const buf = await cdnRes.arrayBuffer();
+              const u8 = new Uint8Array(buf);
+              if (u8[0] === 0x00 && u8[1] === 0x61 && u8[2] === 0x73 && u8[3] === 0x6d) {
+                wasmBinary = buf;
+              }
+            }
+          } catch {}
+        }
+
         const buffer = await file.arrayBuffer();
-        const extractor = await createExtractorFromData({ data: buffer });
+        const extractor = await createExtractorFromData({ data: buffer, wasmBinary });
         const extractedArc = extractor.extract();
         const files = [...extractedArc.files];
 
