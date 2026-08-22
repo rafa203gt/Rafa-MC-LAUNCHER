@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npm --prefix admin-panel run build",
+  "outputDirectory": "admin-panel/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
