@@ -39,11 +39,15 @@ function loadEnvFile(): void {
 // Cargar .env de inmediato al importar
 loadEnvFile();
 
+const DEFAULT_SUPABASE_URL = 'https://wukhkwwstsfvqcnyqoqu.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1a2hrd3dzdHNmdnFjbnlxb3F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNDk5NDUsImV4cCI6MjEwMjkyNTk0NX0.2NfFdLXOH4LHNJyAAqAeeUxtWsGnt6mcrT1VhQ22qzg';
+
 export const ENV = {
-  SUPABASE_URL: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
-  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '',
+  SUPABASE_URL: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
   GITHUB_PAT: process.env.GITHUB_PAT || process.env.VITE_GITHUB_PAT || '',
   GITHUB_REPO: process.env.GITHUB_REPO || process.env.VITE_GITHUB_REPO || 'rafa203gt/Rafa-MC-LAUNCHER',
   DEFAULT_SERVER_IP: process.env.DEFAULT_SERVER_IP || 'play.tuserver.com',
   DEFAULT_SERVER_PORT: Number(process.env.DEFAULT_SERVER_PORT) || 25565
 };
+

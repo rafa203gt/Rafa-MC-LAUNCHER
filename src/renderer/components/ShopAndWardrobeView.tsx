@@ -31,7 +31,8 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { ShopCosmetic, UserEquippedCosmetics, UserEconomy } from '../types';
 import { Cosmetics3DRenderer } from '../utils/cosmetics3d';
@@ -367,11 +368,20 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
 
         {/* Economy Controls */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="p-2.5 bg-black/40 hover:bg-black/60 border border-mc-border/60 text-slate-300 hover:text-white rounded-2xl text-xs font-bold transition-all shadow-inner active:scale-95 flex items-center gap-1.5"
+            title="Recargar saldo y catálogo"
+          >
+            <RefreshCw className={`w-4 h-4 text-indigo-400 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+
           <div className="bg-black/50 border border-amber-500/40 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-inner">
             <Coins className="w-5 h-5 text-amber-400" />
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tus Rafa Coins</span>
-              <span className="text-lg font-black text-amber-300 font-mono">{economy.coins} 🪙</span>
+              <span className="text-lg font-black text-amber-300 font-mono">{economy.coins.toLocaleString()} 🪙</span>
             </div>
           </div>
 
