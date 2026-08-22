@@ -35,6 +35,15 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
 
   useEffect(() => {
     loadInstances();
+    const unbind = (window.launcherAPI as any)?.onInstancesUpdated?.((list: MinecraftInstance[]) => {
+      if (list) {
+        setInstances(list);
+        setLoading(false);
+      }
+    });
+    return () => {
+      if (unbind) unbind();
+    };
   }, []);
 
   const handleActivate = async (instance: MinecraftInstance) => {

@@ -185,6 +185,15 @@ export const App: React.FC = () => {
       }
     });
 
+    const unbindInstancesUpdated = (window.launcherAPI as any).onInstancesUpdated?.((list: MinecraftInstance[]) => {
+      console.log('[Renderer] 📦 Lista de instancias sincronizada en vivo:', list);
+      if (list && list.length > 0) {
+        setInstances(list);
+        const active = list.find((i) => i.isActive) || list[0];
+        if (active) setActiveInstance(active);
+      }
+    });
+
     const unbindRemoteNews = window.launcherAPI.onRemoteNews?.((newsList) => {
       console.log('[Renderer] 📰 Noticias remotas actualizadas:', newsList);
       if (newsList) setNews(newsList);
@@ -203,6 +212,7 @@ export const App: React.FC = () => {
       if (unbindRemoteConfig) unbindRemoteConfig();
       if (unbindRemoteNews) unbindRemoteNews();
       if (unbindCrash) unbindCrash();
+      if (unbindInstancesUpdated) unbindInstancesUpdated();
     };
   }, []);
 

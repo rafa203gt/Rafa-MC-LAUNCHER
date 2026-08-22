@@ -84,8 +84,8 @@ export class RemoteConfigManager {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'launcher_config' },
-          (payload) => {
-            console.log('[RemoteConfig] ⚡ Cambio en vivo recibido de Supabase Realtime!');
+          async (payload) => {
+            console.log('[RemoteConfig] ⚡ Cambio en vivo recibido de Supabase Realtime (launcher_config)!');
             if (payload.new) {
               this.cachedConfig = payload.new as RemoteLauncherConfig;
               this.broadcastConfig(this.cachedConfig);
@@ -94,6 +94,23 @@ export class RemoteConfigManager {
                 if (cfg) this.broadcastConfig(cfg);
               });
             }
+            try {
+              const { instanceManager } = await import('./instance-manager');
+              const list = await instanceManager.syncRemoteInstances();
+              this.broadcastInstances(list);
+            } catch {}
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'instances' },
+          async () => {
+            console.log('[RemoteConfig] 📦 Cambio en vivo de instancias recibido de Supabase!');
+            try {
+              const { instanceManager } = await import('./instance-manager');
+              const list = await instanceManager.syncRemoteInstances();
+              this.broadcastInstances(list);
+            } catch {}
           }
         )
         .on(
@@ -120,8 +137,20 @@ export class RemoteConfigManager {
         if (cfg) this.broadcastConfig(cfg);
         const news = await this.fetchNews();
         this.broadcastNews(news);
+        const { instanceManager } = await import('./instance-manager');
+        const list = await instanceManager.syncRemoteInstances();
+        this.broadcastInstances(list);
       } catch {}
     }, 10000);
+  }
+
+  private broadcastInstances(instances: any[]): void {
+    try {
+      const win = this.getMainWindow?.();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('launcher:instances-updated', instances);
+      }
+    } catch {}
   }
 
   private broadcastConfig(config: RemoteLauncherConfig): void {
