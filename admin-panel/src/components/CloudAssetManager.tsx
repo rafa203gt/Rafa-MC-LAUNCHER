@@ -24,18 +24,20 @@ import {
   ToggleLeft,
   ToggleRight,
   Check,
-  Edit3
+  Edit3,
+  FilePlus,
+  Palette,
+  ExternalLink
 } from 'lucide-react';
 import { gitHubStorage, GitHubAsset } from '../github-storage';
-import { supabase, RemoteInstance, ModpackMod } from '../supabase';
+import { supabase, RemoteInstance, ModpackMod, Shaderpack } from '../supabase';
 
-interface ModEntry {
+interface ConfigItem {
+  id?: string;
   name: string;
-  url: string;
-  size: number;
-  sha1: string;
-  side?: 'client' | 'server' | 'both';
   path: string;
+  content: string;
+  downloadUrl?: string;
 }
 
 export const CloudAssetManager: React.FC = () => {
@@ -65,15 +67,22 @@ export const CloudAssetManager: React.FC = () => {
   const [isBatchUploading, setIsBatchUploading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, currentFile: '' });
 
-  // Config Editor state
-  const [configsList, setConfigsList] = useState<{ name: string; content: string }[]>([
-    { name: 'config/jei-client.ini', content: '# Just Enough Items Configuration\n[advanced]\ncheatItemsEnabled = false\n' },
-    { name: 'config/apotheosis.cfg', content: '# Apotheosis balance and module settings\n[general]\nworld_tier = 1\n' },
-    { name: 'defaultconfigs/ftbquests/client.snbt', content: '{\n  show_chapter_arrows: true,\n  theme: "dark"\n}' }
-  ]);
+  // Configs state
+  const [configsList, setConfigsList] = useState<ConfigItem[]>([]);
   const [activeConfigIndex, setActiveConfigIndex] = useState(0);
   const [configDraft, setConfigDraft] = useState('');
   const [configSavedNotice, setConfigSavedNotice] = useState(false);
+  const [isCreatingConfig, setIsCreatingConfig] = useState(false);
+  const [newConfigPath, setNewConfigPath] = useState('');
+
+  // Shaders & Textures state
+  const [shadersList, setShadersList] = useState<Shaderpack[]>([]);
+  const [isAddingShaderModal, setIsAddingShaderModal] = useState(false);
+  const [newShaderName, setNewShaderName] = useState('');
+  const [newShaderDesc, setNewShaderDesc] = useState('');
+  const [newShaderTier, setNewShaderTier] = useState<'fast' | 'balanced' | 'ultra'>('balanced');
+  const [newShaderUrl, setNewShaderUrl] = useState('');
+  const [newShaderFile, setNewShaderFile] = useState('');
 
   // Load instances from Supabase
   const loadInstances = async () => {
@@ -100,7 +109,7 @@ export const CloudAssetManager: React.FC = () => {
     loadInstances();
   }, []);
 
-  // When instance changes, reload its assets and mods
+  // When instance changes, reload its assets, mods, configs and shaders
   useEffect(() => {
     if (selectedInstanceId) {
       const inst = instances.find((i) => i.id === selectedInstanceId);
@@ -115,14 +124,16 @@ export const CloudAssetManager: React.FC = () => {
   useEffect(() => {
     if (configsList[activeConfigIndex]) {
       setConfigDraft(configsList[activeConfigIndex].content);
+    } else {
+      setConfigDraft('');
     }
   }, [activeConfigIndex, configsList]);
 
-  // Load mods and github assets for the selected instance
+  // Load mods, configs and shaders for the selected instance
   const loadInstanceData = async (instanceId: string) => {
     setIsLoading(true);
     try {
-      // 1. Fetch mods from Supabase modpack_mods table
+      // 1. Fetch all items from modpack_mods for this instance
       const { data: modsData, error: modsError } = await supabase
         .from('modpack_mods')
         .select('*')
@@ -130,7 +141,70 @@ export const CloudAssetManager: React.FC = () => {
         .order('mod_name', { ascending: true });
 
       if (!modsError && modsData) {
-        setMods(modsData);
+        // Mods tab
+        const modsOnly = modsData.filter((m) => m.category === 'mods' || !m.category || m.file_name.endsWith('.jar'));
+        setMods(modsOnly);
+
+        // Configs tab
+        const configsFromDb = modsData.filter(
+          (m) =>
+            m.category === 'config' ||
+            m.file_path.startsWith('config/') ||
+            m.file_path.startsWith('defaultconfigs/') ||
+            m.file_path.startsWith('kubejs/') ||
+            m.file_name.endsWith('.toml') ||
+            m.file_name.endsWith('.json') ||
+            m.file_name.endsWith('.snbt') ||
+            m.file_name.endsWith('.cfg') ||
+            m.file_name.endsWith('.ini')
+        );
+
+        const loadedConfigs: ConfigItem[] = await Promise.all(
+          configsFromDb.map(async (c) => {
+            let text = '';
+            if (c.download_url) {
+              try {
+                const res = await fetch(c.download_url);
+                if (res.ok) text = await res.text();
+              } catch {}
+            }
+            return {
+              id: c.id,
+              name: c.file_name,
+              path: c.file_path || `config/${c.file_name}`,
+              content: text || `# Configuración: ${c.file_name}\n`,
+              downloadUrl: c.download_url
+            };
+          })
+        );
+
+        if (loadedConfigs.length > 0) {
+          setConfigsList(loadedConfigs);
+        } else {
+          setConfigsList([
+            {
+              name: 'config/jei-client.ini',
+              path: 'config/jei-client.ini',
+              content: '# Just Enough Items Configuration\n[advanced]\ncheatItemsEnabled = false\ncenterSearchBar = true\n'
+            },
+            {
+              name: 'config/modernfix-client.toml',
+              path: 'config/modernfix-client.toml',
+              content: '# ModernFix Performance Settings\n[perf]\noptimize_entity_rendering = true\ndeduplicate_strings = true\n'
+            },
+            {
+              name: 'defaultconfigs/ftbquests/client.snbt',
+              path: 'defaultconfigs/ftbquests/client.snbt',
+              content: '{\n  show_chapter_arrows: true,\n  theme: "dark"\n}'
+            }
+          ]);
+        }
+      }
+
+      // 2. Fetch Shaders from shaderpacks table and modpack_mods
+      const { data: shaderTableData } = await supabase.from('shaderpacks').select('*').order('name', { ascending: true });
+      if (shaderTableData) {
+        setShadersList(shaderTableData);
       }
     } catch (err) {
       console.warn(`Error cargando datos para ${instanceId}:`, err);
@@ -172,7 +246,7 @@ export const CloudAssetManager: React.FC = () => {
     }
   };
 
-  // Upload single / bulk .jar mods to GitHub CDN + Supabase
+  // Upload single / bulk files to GitHub CDN + Supabase
   const handleFileUpload = async (files: FileList | null, category = 'mods') => {
     if (!files || files.length === 0 || !selectedInstance) return;
     const releaseTag = `modpack-${selectedInstance.id}-assets`;
@@ -192,13 +266,15 @@ export const CloudAssetManager: React.FC = () => {
         );
 
         // Register in Supabase modpack_mods table
-        const modName = fileName.replace(/\.jar$/i, '').replace(/[-_]/g, ' ');
+        const modName = fileName.replace(/\.(jar|zip|toml|json|snbt|cfg)$/i, '').replace(/[-_]/g, ' ');
+        const filePath = category === 'shaders' ? `shaderpacks/${fileName}` : category === 'config' ? `config/${fileName}` : `mods/${fileName}`;
+
         const { error } = await supabase.from('modpack_mods').upsert(
           {
             instance_id: selectedInstance.id,
             mod_name: modName,
             file_name: fileName,
-            file_path: category === 'shaders' ? `shaderpacks/${fileName}` : `mods/${fileName}`,
+            file_path: filePath,
             file_size: uploaded.size,
             sha1: uploaded.sha1,
             download_url: uploaded.url,
@@ -208,7 +284,21 @@ export const CloudAssetManager: React.FC = () => {
           { onConflict: 'instance_id,file_name' }
         );
 
-        if (error) console.warn('Aviso registrando mod en Supabase:', error.message);
+        if (error) console.warn('Aviso registrando en Supabase:', error.message);
+
+        // If shader, also upsert to shaderpacks table
+        if (category === 'shaders') {
+          await supabase.from('shaderpacks').upsert({
+            id: fileName.replace(/\.zip$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            name: modName,
+            description: `Shaderpack optimizado para ${selectedInstance.name}`,
+            performance_tier: 'balanced',
+            download_url: uploaded.url,
+            file_name: fileName,
+            file_size: uploaded.size,
+            is_active: true
+          });
+        }
       } catch (err: any) {
         setUploadStatus((prev) => ({
           ...prev,
@@ -238,7 +328,7 @@ export const CloudAssetManager: React.FC = () => {
 
   // Delete a mod from Supabase and GitHub
   const handleDeleteMod = async (mod: ModpackMod) => {
-    if (!confirm(`¿Estás seguro de eliminar el mod "${mod.file_name}" de esta instancia?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar "${mod.file_name}" de esta instancia?`)) return;
     const releaseTag = `modpack-${selectedInstanceId}-assets`;
 
     try {
@@ -246,7 +336,7 @@ export const CloudAssetManager: React.FC = () => {
       await gitHubStorage.deleteAssetIfExists(mod.file_name, releaseTag);
       setMods((prev) => prev.filter((m) => m.id !== mod.id));
     } catch (err: any) {
-      alert(`Error eliminando mod: ${err.message}`);
+      alert(`Error eliminando archivo: ${err.message}`);
     }
   };
 
@@ -277,7 +367,8 @@ export const CloudAssetManager: React.FC = () => {
             relativePath.endsWith('.jar') ||
             relativePath.endsWith('.json') ||
             relativePath.endsWith('.toml') ||
-            relativePath.endsWith('.snbt');
+            relativePath.endsWith('.snbt') ||
+            relativePath.endsWith('.cfg');
 
           if (isEligible) {
             const fileName = relativePath.split('/').pop() || relativePath;
@@ -320,32 +411,182 @@ export const CloudAssetManager: React.FC = () => {
           releaseTag
         );
 
-        // Insert into modpack_mods table if it's a jar
-        if (item.name.endsWith('.jar')) {
-          await supabase.from('modpack_mods').upsert(
-            {
-              instance_id: selectedInstance.id,
-              mod_name: item.name.replace(/\.jar$/i, '').replace(/[-_]/g, ' '),
-              file_name: item.name,
-              file_path: item.path,
-              file_size: uploaded.size,
-              sha1: uploaded.sha1,
-              download_url: uploaded.url,
-              is_enabled: true,
-              category: 'mods'
-            },
-            { onConflict: 'instance_id,file_name' }
-          );
+        let category = 'mods';
+        if (item.path.startsWith('shaderpacks/')) category = 'shaders';
+        else if (
+          item.path.startsWith('config/') ||
+          item.path.startsWith('defaultconfigs/') ||
+          item.path.startsWith('kubejs/') ||
+          item.name.endsWith('.toml') ||
+          item.name.endsWith('.cfg') ||
+          item.name.endsWith('.snbt')
+        ) {
+          category = 'config';
+        }
+
+        // Insert into modpack_mods table
+        await supabase.from('modpack_mods').upsert(
+          {
+            instance_id: selectedInstance.id,
+            mod_name: item.name.replace(/\.(jar|zip|toml|json|snbt|cfg)$/i, '').replace(/[-_]/g, ' '),
+            file_name: item.name,
+            file_path: item.path,
+            file_size: uploaded.size,
+            sha1: uploaded.sha1,
+            download_url: uploaded.url,
+            is_enabled: true,
+            category: category
+          },
+          { onConflict: 'instance_id,file_name' }
+        );
+
+        if (category === 'shaders') {
+          await supabase.from('shaderpacks').upsert({
+            id: item.name.replace(/\.zip$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            name: item.name.replace(/\.zip$/i, ''),
+            description: `Shaderpack de ${selectedInstance.name}`,
+            performance_tier: 'balanced',
+            download_url: uploaded.url,
+            file_name: item.name,
+            file_size: uploaded.size,
+            is_active: true
+          });
         }
       }
 
-      alert(`✅ ¡${zipFiles.length} archivos subidos con éxito a la instancia "${selectedInstance.name}"!`);
+      alert(`✅ ¡${zipFiles.length} archivos subidos y clasificados con éxito en "${selectedInstance.name}"!`);
       setZipFiles([]);
       await loadInstanceData(selectedInstance.id);
     } catch (err: any) {
       alert(`Error durante la subida masiva: ${err.message}`);
     } finally {
       setIsBatchUploading(false);
+    }
+  };
+
+  // Save current config file text content
+  const handleSaveCurrentConfig = async () => {
+    if (!selectedInstance || !configsList[activeConfigIndex]) return;
+    const currentCfg = configsList[activeConfigIndex];
+    setIsLoading(true);
+    const releaseTag = `modpack-${selectedInstance.id}-assets`;
+
+    try {
+      const blob = new Blob([configDraft], { type: 'text/plain;charset=utf-8' });
+      const file = new File([blob], currentCfg.name.split('/').pop() || currentCfg.name);
+
+      const uploaded = await gitHubStorage.uploadAsset(file, undefined, releaseTag);
+
+      await supabase.from('modpack_mods').upsert(
+        {
+          instance_id: selectedInstance.id,
+          mod_name: currentCfg.name,
+          file_name: currentCfg.name.split('/').pop() || currentCfg.name,
+          file_path: currentCfg.path,
+          file_size: uploaded.size,
+          sha1: uploaded.sha1,
+          download_url: uploaded.url,
+          is_enabled: true,
+          category: 'config'
+        },
+        { onConflict: 'instance_id,file_name' }
+      );
+
+      const updated = [...configsList];
+      updated[activeConfigIndex].content = configDraft;
+      updated[activeConfigIndex].downloadUrl = uploaded.url;
+      setConfigsList(updated);
+
+      setConfigSavedNotice(true);
+      setTimeout(() => setConfigSavedNotice(false), 3000);
+    } catch (err: any) {
+      alert(`Error guardando configuración: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Create brand new config file
+  const handleCreateNewConfigFile = async () => {
+    if (!newConfigPath.trim() || !selectedInstance) return;
+    const cleanPath = newConfigPath.startsWith('config/') ? newConfigPath.trim() : `config/${newConfigPath.trim()}`;
+    const fileName = cleanPath.split('/').pop() || cleanPath;
+
+    const newEntry: ConfigItem = {
+      name: fileName,
+      path: cleanPath,
+      content: `# Configuración: ${fileName}\n`
+    };
+
+    const nextList = [newEntry, ...configsList];
+    setConfigsList(nextList);
+    setActiveConfigIndex(0);
+    setConfigDraft(newEntry.content);
+    setIsCreatingConfig(false);
+    setNewConfigPath('');
+  };
+
+  // Delete config file
+  const handleDeleteConfig = async (cfg: ConfigItem, index: number) => {
+    if (!confirm(`¿Estás seguro de eliminar el archivo "${cfg.name}"?`)) return;
+    if (cfg.id) {
+      await supabase.from('modpack_mods').delete().eq('id', cfg.id);
+    }
+    const nextList = configsList.filter((_, idx) => idx !== index);
+    setConfigsList(nextList);
+    setActiveConfigIndex(Math.max(0, index - 1));
+  };
+
+  // Add Manual Shaderpack
+  const handleAddManualShader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newShaderName.trim() || !newShaderUrl.trim()) return;
+
+    try {
+      const id = newShaderName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const { error } = await supabase.from('shaderpacks').insert({
+        id: `${id}-${Date.now().toString().slice(-4)}`,
+        name: newShaderName,
+        description: newShaderDesc || 'Shaderpack personalizado',
+        performance_tier: newShaderTier,
+        download_url: newShaderUrl,
+        file_name: newShaderFile || `${id}.zip`,
+        file_size: 15000000,
+        is_active: true
+      });
+
+      if (error) throw error;
+      alert('✅ Shaderpack registrado con éxito');
+      setIsAddingShaderModal(false);
+      setNewShaderName('');
+      setNewShaderDesc('');
+      setNewShaderUrl('');
+      setNewShaderFile('');
+      if (selectedInstance) loadInstanceData(selectedInstance.id);
+    } catch (err: any) {
+      alert(`Error al registrar shader: ${err.message}`);
+    }
+  };
+
+  // Toggle Shader Active
+  const handleToggleShader = async (shader: Shaderpack) => {
+    try {
+      const nextState = !shader.is_active;
+      await supabase.from('shaderpacks').update({ is_active: nextState }).eq('id', shader.id);
+      setShadersList((prev) => prev.map((s) => (s.id === shader.id ? { ...s, is_active: nextState } : s)));
+    } catch (err: any) {
+      alert(`Error al cambiar estado del shader: ${err.message}`);
+    }
+  };
+
+  // Delete Shader
+  const handleDeleteShader = async (shader: Shaderpack) => {
+    if (!confirm(`¿Estás seguro de eliminar el shader "${shader.name}"?`)) return;
+    try {
+      await supabase.from('shaderpacks').delete().eq('id', shader.id);
+      setShadersList((prev) => prev.filter((s) => s.id !== shader.id));
+    } catch (err: any) {
+      alert(`Error al eliminar shader: ${err.message}`);
     }
   };
 
@@ -436,73 +677,56 @@ export const CloudAssetManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
+      {/* Top Banner & Multi-Instance Selector */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-indigo-500/20 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-indigo-500/20 border border-indigo-500/40 rounded-2xl text-indigo-400 shadow-inner">
               <Cloud className="w-7 h-7" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-xl font-black text-white">Almacenamiento Ilimitado de Modpacks</h2>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" /> GitHub Releases CDN (100% Gratis)
-                </span>
-                <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1">
-                  <Layers className="w-3.5 h-3.5" /> Multi-Instancia
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-white tracking-wide">
+                  Almacenamiento Ilimitado de Modpacks
+                </h2>
+                <span className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-full flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" /> CDN 100% Gratis
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Gestiona, edita archivos y sincroniza cada modpack de forma 100% independiente.
+              <p className="text-xs text-slate-300">
+                Sube modpacks enteros, mods, configs y shaders con distribución ultrarrápida.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap w-full lg:w-auto">
-            {gitHubStorage.hasEnvToken() ? (
-              <div className="px-3 py-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Token Seguro (.env)</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowTokenModal(true)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all ${
-                  token
-                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-                    : 'bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse'
-                }`}
-              >
-                <Key className="w-4 h-4" />
-                {token ? 'Token Configurado' : '⚠️ Configurar Token'}
-              </button>
-            )}
-
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleCloneInstance}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all active:scale-95 shadow-md"
-              title="Duplicar este modpack y crear una nueva instancia"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
+              title="Clonar este modpack completo a una nueva instancia"
             >
-              <Copy className="w-4 h-4 text-purple-400" />
+              <Copy className="w-3.5 h-3.5 text-indigo-400" />
               Clonar Instancia
             </button>
 
             <button
               onClick={handleBroadcastSync}
               disabled={isLoading}
-              className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-glow flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-lg active:scale-95 transition-all"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               Publicar y Sincronizar en Vivo
             </button>
           </div>
         </div>
 
-        <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Server className="w-3.5 h-3.5 text-indigo-400" /> Instancia Activa:
+        {/* Active Instance Header Control */}
+        <div className="mt-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Server className="w-4 h-4 text-indigo-400" /> Instancia Activa:
             </span>
+
             <select
               value={selectedInstanceId}
               onChange={(e) => setSelectedInstanceId(e.target.value)}
@@ -543,12 +767,13 @@ export const CloudAssetManager: React.FC = () => {
           )}
         </div>
 
+        {/* Quick Parameters Editor Drawer */}
         {isEditingParams && selectedInstance && (
           <div className="mt-5 p-5 bg-slate-950 border border-indigo-500/30 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-black text-white flex items-center gap-2">
                 <Settings className="w-4 h-4 text-indigo-400" />
-                Configurar Parámetros de la Instancia "{selectedInstance.name}"
+                Configurar Parámetros de "{selectedInstance.name}"
               </h3>
               <button
                 onClick={handleSaveInstanceParams}
@@ -561,7 +786,7 @@ export const CloudAssetManager: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre del Modpack</label>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre</label>
                 <input
                   type="text"
                   value={instanceParamsDraft.name || ''}
@@ -570,7 +795,7 @@ export const CloudAssetManager: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versión de Minecraft</label>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versión MC</label>
                 <input
                   type="text"
                   value={instanceParamsDraft.minecraft_version || ''}
@@ -591,7 +816,7 @@ export const CloudAssetManager: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versión del Loader</label>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versión Loader</label>
                 <input
                   type="text"
                   value={instanceParamsDraft.mod_loader_version || ''}
@@ -600,7 +825,7 @@ export const CloudAssetManager: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">RAM Recomendada (MB)</label>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">RAM (MB)</label>
                 <input
                   type="number"
                   value={instanceParamsDraft.custom_ram || 8192}
@@ -609,7 +834,7 @@ export const CloudAssetManager: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">IP del Servidor</label>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">IP Servidor</label>
                 <input
                   type="text"
                   value={instanceParamsDraft.server_ip || ''}
@@ -640,6 +865,7 @@ export const CloudAssetManager: React.FC = () => {
         )}
       </div>
 
+      {/* Navigation Sub-Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
         <button
           onClick={() => setActiveTab('mods')}
@@ -663,7 +889,7 @@ export const CloudAssetManager: React.FC = () => {
             activeTab === 'configs' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
           }`}
         >
-          <FileCode className="w-4 h-4" /> Editor de Configs
+          <FileCode className="w-4 h-4" /> Editor de Configs ({configsList.length})
         </button>
         <button
           onClick={() => setActiveTab('shaders')}
@@ -671,7 +897,7 @@ export const CloudAssetManager: React.FC = () => {
             activeTab === 'shaders' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sparkles className="w-4 h-4" /> Shaders y Texturas
+          <Sparkles className="w-4 h-4" /> Shaders y Texturas ({shadersList.length})
         </button>
         <button
           onClick={() => setActiveTab('manifest')}
@@ -683,92 +909,418 @@ export const CloudAssetManager: React.FC = () => {
         </button>
       </div>
 
+      {/* TAB 1: MODS */}
       {activeTab === 'mods' && (
         <div className="space-y-6">
-          <div className="bg-slate-900/60 border-2 border-dashed border-indigo-500/30 rounded-3xl p-8 text-center transition-all group">
+          <div className="bg-slate-900/60 border-2 border-dashed border-indigo-500/30 hover:border-indigo-500/60 rounded-3xl p-8 text-center transition-all group">
             <input type="file" multiple accept=".jar" id="mod-upload-input" className="hidden" onChange={(e) => handleFileUpload(e.target.files, 'mods')} />
             <label htmlFor="mod-upload-input" className="cursor-pointer flex flex-col items-center gap-3">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400"><Upload className="w-8 h-8" /></div>
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <Upload className="w-8 h-8" />
+              </div>
               <h3 className="text-base font-black text-white">Arrastra mods (.JAR) para {selectedInstance?.name}</h3>
-              <span className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">Examinar Archivos .JAR</span>
+              <p className="text-xs text-slate-400 max-w-md">Se subirán directamente al CDN de GitHub Releases con hashes SHA-1 calculados automáticamente.</p>
+              <span className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md">Examinar Archivos .JAR</span>
             </label>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-xl">
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Buscar mods instalados..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white outline-none focus:border-indigo-500"
+              />
+            </div>
+            <span className="text-xs text-slate-400 font-mono font-bold">Total: {filteredMods.length} mods</span>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/80 text-slate-400 font-bold border-b border-slate-800 uppercase">
-                <tr><th className="px-6 py-4">Estado</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Archivo</th><th className="px-6 py-4 text-right">Acciones</th></tr>
+              <thead className="bg-slate-950/80 text-slate-400 font-bold border-b border-slate-800 uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-4">Estado</th>
+                  <th className="px-6 py-4">Nombre del Mod</th>
+                  <th className="px-6 py-4">Archivo</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredMods.map((mod) => (
-                  <tr key={mod.id}>
-                    <td className="px-6 py-4"><button onClick={() => handleToggleMod(mod)} className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-bold border ${mod.is_enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{mod.is_enabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />} {mod.is_enabled ? 'Activo' : 'Desactivado'}</button></td>
-                    <td className="px-6 py-4 font-bold text-white">{mod.mod_name}</td>
-                    <td className="px-6 py-4 font-mono text-slate-300">{mod.file_name}</td>
-                    <td className="px-6 py-4 text-right"><button onClick={() => handleDeleteMod(mod)} className="p-2 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
+                {filteredMods.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                      No hay mods registrados en esta instancia. ¡Sube tus archivos .jar arriba o extrae un modpack .zip!
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredMods.map((mod) => (
+                    <tr key={mod.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleToggleMod(mod)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                            mod.is_enabled
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {mod.is_enabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          {mod.is_enabled ? 'Activo' : 'Desactivado'}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 font-bold text-white">{mod.mod_name}</td>
+                      <td className="px-6 py-4 font-mono text-slate-300">{mod.file_name}</td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => handleDeleteMod(mod)}
+                          className="p-2 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
+                          title="Eliminar Mod"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
+      {/* TAB 2: EXTRACTOR .ZIP */}
       {activeTab === 'modpack_zip' && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
           <div className="bg-slate-950 border-2 border-dashed border-indigo-500/30 rounded-2xl p-8 text-center">
             <input type="file" accept=".zip" id="zip-upload-input" className="hidden" onChange={(e) => e.target.files?.[0] && handleZipFileDrop(e.target.files[0])} />
-            <label htmlFor="zip-upload-input" className="cursor-pointer">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-3"><FolderArchive className="w-8 h-8" /></div>
-              <h4 className="text-sm font-bold text-white">Selecciona tu archivo modpack.zip</h4>
-              <span className="inline-block mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">Cargar Archivo .ZIP</span>
+            <label htmlFor="zip-upload-input" className="cursor-pointer flex flex-col items-center gap-3">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <FolderArchive className="w-8 h-8" />
+              </div>
+              <h4 className="text-base font-bold text-white">Arrastra o selecciona un archivo Modpack.zip</h4>
+              <p className="text-xs text-slate-400 max-w-md">
+                El panel extraerá y clasificará automáticamente los mods (`mods/`), configs (`config/`) y shaders (`shaderpacks/`) para subirlos a la instancia "{selectedInstance?.name}".
+              </p>
+              <span className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md">
+                Cargar Archivo .ZIP
+              </span>
             </label>
           </div>
+
           {zipFiles.length > 0 && (
-            <button onClick={handleUploadZipContents} disabled={isBatchUploading} className="w-full px-5 py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold">{isBatchUploading ? 'Subiendo...' : 'Subir contenido a la Instancia'}</button>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-3">
+                <span className="font-bold text-slate-200">
+                  📦 {zipFiles.length} archivos listos para extraer y subir
+                </span>
+                <button
+                  onClick={handleUploadZipContents}
+                  disabled={isBatchUploading}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  {isBatchUploading ? `Subiendo (${batchProgress.current}/${batchProgress.total})...` : 'Subir contenido al Modpack'}
+                </button>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-1.5 pr-2 font-mono text-[11px]">
+                {zipFiles.map((file, idx) => (
+                  <div key={idx} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                    <span className="text-slate-300 truncate">{file.path}</span>
+                    <span className="text-[10px] text-indigo-400 font-bold uppercase">{file.path.startsWith('config/') ? 'Config' : file.path.startsWith('shaderpacks/') ? 'Shader' : 'Mod'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}
 
+      {/* TAB 3: CONFIGS */}
       {activeTab === 'configs' && (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-2">
-            <h4 className="text-xs font-bold text-slate-400 uppercase mb-4">Archivos</h4>
-            {configsList.map((cfg, idx) => (
-              <button key={idx} onClick={() => setActiveConfigIndex(idx)} className={`w-full text-left px-3 py-2 rounded-xl text-xs font-mono truncate ${activeConfigIndex === idx ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400'}`}>{cfg.name}</button>
-            ))}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <FileCode className="w-4 h-4 text-indigo-400" />
+                Archivos de Configuración de "{selectedInstance?.name}"
+              </h3>
+              <p className="text-xs text-slate-400">
+                Edita o sube archivos de configuración (.toml, .json, .snbt, .cfg, .ini) que se sincronizan con los jugadores.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                multiple
+                accept=".toml,.json,.cfg,.snbt,.ini,.txt,.properties"
+                id="config-upload-input"
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files, 'config')}
+              />
+              <label
+                htmlFor="config-upload-input"
+                className="cursor-pointer px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700"
+              >
+                <Upload className="w-3.5 h-3.5 text-indigo-400" /> Subir Configs
+              </label>
+
+              <button
+                onClick={() => setIsCreatingConfig(true)}
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+              >
+                <FilePlus className="w-3.5 h-3.5" /> Nueva Config
+              </button>
+            </div>
           </div>
-          <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col space-y-4">
-            <textarea value={configDraft} onChange={(e) => setConfigDraft(e.target.value)} className="w-full flex-1 min-h-[420px] bg-slate-950 border border-slate-800 rounded-2xl p-4 font-mono text-xs text-slate-200" />
-            <button onClick={() => { const updated = [...configsList]; updated[activeConfigIndex].content = configDraft; setConfigsList(updated); setConfigSavedNotice(true); setTimeout(() => setConfigSavedNotice(false), 2500); }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold w-max">{configSavedNotice ? 'Guardado' : 'Guardar Archivo'}</button>
+
+          {/* New Config Dialog */}
+          {isCreatingConfig && (
+            <div className="p-4 bg-slate-950 border border-indigo-500/40 rounded-2xl space-y-3 animate-in fade-in">
+              <h4 className="text-xs font-bold text-white">Crear Nuevo Archivo de Configuración</h4>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="ej: config/modernfix.toml o defaultconfigs/ftb.snbt"
+                  value={newConfigPath}
+                  onChange={(e) => setNewConfigPath(e.target.value)}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono outline-none focus:border-indigo-500"
+                />
+                <button
+                  onClick={handleCreateNewConfigFile}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold"
+                >
+                  Crear
+                </button>
+                <button
+                  onClick={() => setIsCreatingConfig(false)}
+                  className="px-3 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Sidebar list of configs */}
+            <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                <h4 className="text-xs font-bold text-slate-400 uppercase">Archivos ({configsList.length})</h4>
+              </div>
+              <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
+                {configsList.map((cfg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between p-2 rounded-xl text-xs font-mono transition-all group ${
+                      activeConfigIndex === idx
+                        ? 'bg-indigo-600 text-white shadow-md font-bold'
+                        : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <button
+                      onClick={() => setActiveConfigIndex(idx)}
+                      className="flex-1 text-left truncate pr-2"
+                    >
+                      {cfg.path || cfg.name}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteConfig(cfg, idx)}
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Code Editor */}
+            <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <span className="text-xs font-mono font-bold text-indigo-300">
+                  {configsList[activeConfigIndex]?.path || configsList[activeConfigIndex]?.name || 'Editor'}
+                </span>
+                <button
+                  onClick={handleSaveCurrentConfig}
+                  disabled={isLoading || !configsList.length}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {configSavedNotice ? '✅ ¡Guardado y Sincronizado!' : 'Guardar Archivo'}
+                </button>
+              </div>
+
+              <textarea
+                value={configDraft}
+                onChange={(e) => setConfigDraft(e.target.value)}
+                placeholder="# Escribe aquí la configuración..."
+                className="w-full flex-1 min-h-[460px] bg-slate-950 border border-slate-800/90 rounded-2xl p-4 font-mono text-xs text-slate-200 outline-none focus:border-indigo-500/60 leading-relaxed shadow-inner"
+              />
+            </div>
           </div>
         </div>
       )}
 
-      {/* TAB 4: SHADERS */}
+      {/* TAB 4: SHADERS Y TEXTURAS */}
       {activeTab === 'shaders' && (
         <div className="space-y-6">
-          <div className="bg-slate-900/60 border-2 border-dashed border-purple-500/30 rounded-3xl p-8 text-center transition-all group">
-            <input type="file" multiple accept=".zip" id="shader-upload-input" className="hidden" onChange={(e) => handleFileUpload(e.target.files, 'shaders')} />
-            <label htmlFor="shader-upload-input" className="cursor-pointer flex flex-col items-center gap-3">
-              <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400"><Sparkles className="w-8 h-8" /></div>
-              <h3 className="text-base font-black text-white">Subir Paquetes de Shaders (.ZIP) para {selectedInstance?.name}</h3>
-              <span className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow-md">Examinar Shaders .ZIP</span>
-            </label>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-3xl">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-2xl text-purple-400">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Paquetes de Shaders y Texturas</h3>
+                <p className="text-xs text-slate-400">Sube paquetes .zip compatibles con Iris, Oculus y Sodium para tu modpack.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                multiple
+                accept=".zip"
+                id="shader-direct-upload"
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files, 'shaders')}
+              />
+              <label
+                htmlFor="shader-direct-upload"
+                className="cursor-pointer px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md"
+              >
+                <Upload className="w-4 h-4" /> Subir Shaderpack .ZIP
+              </label>
+
+              <button
+                onClick={() => setIsAddingShaderModal(true)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700"
+              >
+                <Plus className="w-4 h-4 text-purple-400" /> Añadir por URL
+              </button>
+            </div>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-xl">
+
+          {/* Add Shader by URL Modal */}
+          {isAddingShaderModal && (
+            <form onSubmit={handleAddManualShader} className="p-6 bg-slate-950 border border-purple-500/40 rounded-3xl space-y-4 animate-in fade-in shadow-2xl">
+              <h4 className="text-sm font-bold text-white">Registrar Nuevo Shaderpack por URL</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">Nombre del Shader</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ej: Complementary Reimagined"
+                    value={newShaderName}
+                    onChange={(e) => setNewShaderName(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">URL de Descarga Directa (.zip)</label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://..."
+                    value={newShaderUrl}
+                    onChange={(e) => setNewShaderUrl(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">Perfil de Rendimiento</label>
+                  <select
+                    value={newShaderTier}
+                    onChange={(e) => setNewShaderTier(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="fast">⚡ Rendimiento (PCs Gama Media/Baja)</option>
+                    <option value="balanced">⚖️ Balanceado (Recomendado)</option>
+                    <option value="ultra">🌟 Ultra / Cinematic (RTX 3060+)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">Nombre de Archivo (.zip)</label>
+                  <input
+                    type="text"
+                    placeholder="ej: ComplementaryReimagined_r5.4.zip"
+                    value={newShaderFile}
+                    onChange={(e) => setNewShaderFile(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsAddingShaderModal(false)} className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs font-bold">Cancelar</button>
+                <button type="submit" className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-md">Guardar Shaderpack</button>
+              </div>
+            </form>
+          )}
+
+          {/* Shaders Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/80 text-slate-400 font-bold border-b border-slate-800 uppercase">
-                <tr><th className="px-6 py-4">Nombre del Shader</th><th className="px-6 py-4">Ruta</th><th className="px-6 py-4 text-right">Acciones</th></tr>
+              <thead className="bg-slate-950/80 text-slate-400 font-bold border-b border-slate-800 uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-4">Estado</th>
+                  <th className="px-6 py-4">Nombre del Shader</th>
+                  <th className="px-6 py-4">Perfil</th>
+                  <th className="px-6 py-4">Archivo</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {mods.filter((m) => m.category === 'shaders').length === 0 ? (
-                  <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-500">No hay shaders asignados a esta instancia.</td></tr>
+                {shadersList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                      No hay shaders registrados. ¡Sube un paquete .zip arriba para asignarlo a tus jugadores!
+                    </td>
+                  </tr>
                 ) : (
-                  mods.filter((m) => m.category === 'shaders').map((shader) => (
-                    <tr key={shader.id}>
-                      <td className="px-6 py-4 font-bold text-white">{shader.mod_name}</td>
-                      <td className="px-6 py-4 font-mono text-purple-300">{shader.file_path}</td>
-                      <td className="px-6 py-4 text-right"><button onClick={() => handleDeleteMod(shader)} className="p-2 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
+                  shadersList.map((shader) => (
+                    <tr key={shader.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleToggleShader(shader)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                            shader.is_active
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {shader.is_active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          {shader.is_active ? 'Activo' : 'Oculto'}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 font-bold text-white flex items-center gap-2">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        {shader.name}
+                      </td>
+                      <td className="px-6 py-4 font-bold">
+                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${
+                          shader.performance_tier === 'ultra' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                          shader.performance_tier === 'fast' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
+                          'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                        }`}>
+                          {shader.performance_tier || 'balanced'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">{shader.file_name}</td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => handleDeleteShader(shader)}
+                          className="p-2 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
+                          title="Eliminar Shader"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -788,7 +1340,7 @@ export const CloudAssetManager: React.FC = () => {
                 Manifiesto Generado de "{selectedInstance.name}"
               </h3>
               <p className="text-xs text-slate-400">
-                Estructura JSON exacta que el launcher descargará para actualizar los {mods.filter((m) => m.is_enabled).length} mods activos.
+                Estructura JSON exacta con {mods.filter((m) => m.is_enabled).length} mods, {configsList.length} configs y shaders activos que el launcher sincronizará.
               </p>
             </div>
             <button
@@ -799,12 +1351,20 @@ export const CloudAssetManager: React.FC = () => {
                   minecraftVersion: selectedInstance.minecraft_version || '1.21.1',
                   modLoader: selectedInstance.mod_loader || 'neoforge',
                   modLoaderVersion: selectedInstance.mod_loader_version || '21.1.247',
-                  files: mods.filter((m) => m.is_enabled).map((m) => ({
-                    path: m.file_path || `mods/${m.file_name}`,
-                    sha1: m.sha1,
-                    size: m.file_size,
-                    downloadUrl: m.download_url
-                  }))
+                  files: [
+                    ...mods.filter((m) => m.is_enabled).map((m) => ({
+                      path: m.file_path || `mods/${m.file_name}`,
+                      sha1: m.sha1,
+                      size: m.file_size,
+                      downloadUrl: m.download_url
+                    })),
+                    ...configsList.filter((c) => c.downloadUrl).map((c) => ({
+                      path: c.path,
+                      sha1: '',
+                      size: c.content.length,
+                      downloadUrl: c.downloadUrl
+                    }))
+                  ]
                 };
                 const blob = new Blob([JSON.stringify(manifestData, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -827,12 +1387,20 @@ export const CloudAssetManager: React.FC = () => {
                 minecraftVersion: selectedInstance.minecraft_version || '1.21.1',
                 modLoader: selectedInstance.mod_loader || 'neoforge',
                 modLoaderVersion: selectedInstance.mod_loader_version || '21.1.247',
-                files: mods.filter((m) => m.is_enabled).map((m) => ({
-                  path: m.file_path || `mods/${m.file_name}`,
-                  sha1: m.sha1,
-                  size: m.file_size,
-                  downloadUrl: m.download_url
-                }))
+                files: [
+                  ...mods.filter((m) => m.is_enabled).map((m) => ({
+                    path: m.file_path || `mods/${m.file_name}`,
+                    sha1: m.sha1,
+                    size: m.file_size,
+                    downloadUrl: m.download_url
+                  })),
+                  ...configsList.filter((c) => c.downloadUrl).map((c) => ({
+                    path: c.path,
+                    sha1: '',
+                    size: c.content.length,
+                    downloadUrl: c.downloadUrl
+                  }))
+                ]
               },
               null,
               2
