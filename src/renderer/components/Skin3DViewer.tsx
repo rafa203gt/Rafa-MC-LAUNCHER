@@ -15,17 +15,45 @@ export const Skin3DViewer: React.FC<Skin3DViewerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const skinViewerRef = useRef<SkinViewer | null>(null);
 
+  const loadSkinForUser = async (user: string) => {
+    const cleanUser = (user || 'Steve').trim();
+    let skinUrl = `https://minotar.net/skin/${encodeURIComponent(cleanUser)}`;
+    let model: 'default' | 'slim' = 'default';
+    let capeUrl: string | null = null;
+
+    if (window.launcherAPI?.getUserSkin) {
+      try {
+        const customSkin = await window.launcherAPI.getUserSkin(cleanUser);
+        if (customSkin && (customSkin.skinData || customSkin.skinUrl)) {
+          skinUrl = customSkin.skinData || customSkin.skinUrl;
+          model = customSkin.model || 'default';
+          capeUrl = customSkin.capeUrl || null;
+        }
+      } catch {}
+    }
+
+    if (skinViewerRef.current) {
+      try {
+        await skinViewerRef.current.loadSkin(skinUrl, { model });
+        if (capeUrl) {
+          await skinViewerRef.current.loadCape(capeUrl);
+        } else {
+          skinViewerRef.current.resetCape();
+        }
+      } catch {
+        skinViewerRef.current.loadSkin('https://minotar.net/skin/Steve').catch(() => {});
+      }
+    }
+  };
+
   useEffect(() => {
     if (!canvasRef.current) return;
-
-    const cleanUser = (username || 'Steve').trim();
-    const skinUrl = `https://minotar.net/skin/${encodeURIComponent(cleanUser)}`;
 
     const viewer = new SkinViewer({
       canvas: canvasRef.current,
       width: width,
       height: height,
-      skin: skinUrl
+      skin: 'https://minotar.net/skin/Steve'
     });
 
     viewer.fov = 70;
@@ -36,6 +64,8 @@ export const Skin3DViewer: React.FC<Skin3DViewerProps> = ({
 
     skinViewerRef.current = viewer;
 
+    loadSkinForUser(username);
+
     return () => {
       viewer.dispose();
       skinViewerRef.current = null;
@@ -44,10 +74,7 @@ export const Skin3DViewer: React.FC<Skin3DViewerProps> = ({
 
   useEffect(() => {
     if (skinViewerRef.current && username) {
-      const cleanUser = username.trim() || 'Steve';
-      skinViewerRef.current.loadSkin(`https://minotar.net/skin/${encodeURIComponent(cleanUser)}`).catch(() => {
-        skinViewerRef.current?.loadSkin('https://minotar.net/skin/Steve');
-      });
+      loadSkinForUser(username);
     }
   }, [username]);
 

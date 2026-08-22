@@ -398,6 +398,14 @@ export class MinecraftLauncher {
         });
       }
 
+      // 2.5. SYNCHRONIZE COMMUNITY SKINS (CustomSkinLoader)
+      try {
+        const { skinManager } = await import('./skin-manager');
+        await skinManager.syncCommunitySkinsToInstance(instanceDir, onLog);
+      } catch (skinErr) {
+        console.warn('[Launcher] Error sincronizando skins comunitarias:', skinErr);
+      }
+
       // 3. MINECRAFT & MODLOADER PREPARATION
       onProgress({
         stage: 'assets',

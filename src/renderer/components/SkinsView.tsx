@@ -122,7 +122,7 @@ export const SkinsView: React.FC<SkinsViewProps> = ({ currentUsername, onUsernam
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Initialize SkinViewer
+  // Initialize SkinViewer & load cloud skin
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -141,6 +141,18 @@ export const SkinsView: React.FC<SkinsViewProps> = ({ currentUsername, onUsernam
     viewer.animation = new IdleAnimation();
 
     skinViewerRef.current = viewer;
+
+    // Load user's saved skin from Cloud/Database
+    if (window.launcherAPI?.getUserSkin && currentUsername) {
+      window.launcherAPI.getUserSkin(currentUsername).then((customSkin) => {
+        if (customSkin && (customSkin.skinData || customSkin.skinUrl)) {
+          const urlToUse = customSkin.skinData || customSkin.skinUrl;
+          applySkinToViewer(urlToUse, customSkin.model || 'default', customSkin.username || currentUsername, customSkin.capeUrl || undefined);
+        }
+      }).catch((err) => {
+        console.warn('Error loading custom user skin:', err);
+      });
+    }
 
     return () => {
       viewer.dispose();
@@ -294,12 +306,39 @@ export const SkinsView: React.FC<SkinsViewProps> = ({ currentUsername, onUsernam
     showToast('📸 ¡Captura HD 3D guardada con fondo transparente!');
   };
 
-  // Apply to Launcher Profile
-  const handleApplyToProfile = () => {
-    if (onUsernameChange && activeSkinName) {
-      onUsernameChange(activeSkinName);
+  const [isSavingSkin, setIsSavingSkin] = useState(false);
+
+  // Apply to Launcher Profile & Cloud Sync
+  const handleApplyToProfile = async () => {
+    setIsSavingSkin(true);
+    try {
+      const usernameToSave = (currentUsername || 'Jugador').trim();
+      let skinDataPayload: string | undefined = undefined;
+
+      if (currentSkinUrl.startsWith('data:image/png;base64,')) {
+        skinDataPayload = currentSkinUrl;
+      }
+
+      if (window.launcherAPI?.saveUserSkin) {
+        await window.launcherAPI.saveUserSkin({
+          username: usernameToSave,
+          skinUrl: currentSkinUrl,
+          skinData: skinDataPayload,
+          model: selectedModel,
+          capeUrl: currentCapeUrl
+        });
+      }
+
+      if (onUsernameChange && activeSkinName && activeSkinName !== currentUsername && activeSkinName !== 'Steve Clásico') {
+        // Only change username if the user explicitly selected a named skin and wants that username
+      }
+
+      showToast(`✅ ¡Skin sincronizada en la nube! Todos los jugadores con este modpack verán tu aspecto.`);
+    } catch (err: any) {
+      showToast(`⚠️ Error al sincronizar skin: ${err.message}`);
+    } finally {
+      setIsSavingSkin(false);
     }
-    showToast(`✅ ¡Aspecto "${activeSkinName}" aplicado a tu perfil del Launcher!`);
   };
 
   // Filter Catalog
@@ -323,7 +362,7 @@ export const SkinsView: React.FC<SkinsViewProps> = ({ currentUsername, onUsernam
             Estudio de Skins 3D & Explorador de Aspectos
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Visualizador 3D WebGL con animaciones, capas y catálogo público con búsqueda por Mojang API.
+            Visualizador 3D WebGL con sincronización comunitaria en tiempo real para todos los jugadores del modpack.
           </p>
         </div>
 
@@ -337,10 +376,11 @@ export const SkinsView: React.FC<SkinsViewProps> = ({ currentUsername, onUsernam
 
           <button
             onClick={handleApplyToProfile}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-glow transition-all active:scale-95"
+            disabled={isSavingSkin}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-glow transition-all active:scale-95 disabled:opacity-50"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            Aplicar a mi Perfil
+            <CheckCircle2 className={`w-4 h-4 ${isSavingSkin ? 'animate-spin' : ''}`} />
+            {isSavingSkin ? 'Sincronizando...' : 'Aplicar a mi Perfil'}
           </button>
         </div>
       </div>

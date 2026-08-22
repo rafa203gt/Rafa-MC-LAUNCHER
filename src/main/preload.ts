@@ -100,7 +100,13 @@ export const API = {
     const handler = (_event: any, code: number) => callback(code);
     ipcRenderer.on('launcher:closed', handler);
     return () => ipcRenderer.removeListener('launcher:closed', handler);
-  }
+  },
+
+  // Custom Community Skins
+  getUserSkin: (username: string) => ipcRenderer.invoke('skins:get-user', username),
+  saveUserSkin: (data: { username: string; skinUrl: string; skinData?: string; model?: 'default' | 'slim'; capeUrl?: string | null }) =>
+    ipcRenderer.invoke('skins:save-user', data),
+  syncCommunitySkins: (instanceDir?: string) => ipcRenderer.invoke('skins:sync-community', instanceDir)
 };
 
 contextBridge.exposeInMainWorld('launcherAPI', API);

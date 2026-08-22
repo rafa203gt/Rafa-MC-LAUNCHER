@@ -180,6 +180,9 @@ export interface LauncherAPI {
   onGameClosed: (callback: (code: number) => void) => () => void;
   diagnoseLastCrash?: () => Promise<CrashDiagnosis>;
   onCrashDiagnosis?: (callback: (data: CrashDiagnosis) => void) => () => void;
+  getUserSkin?: (username: string) => Promise<{ username: string; skinUrl: string; skinData?: string; model: 'default' | 'slim'; capeUrl?: string | null } | null>;
+  saveUserSkin?: (data: { username: string; skinUrl: string; skinData?: string; model?: 'default' | 'slim'; capeUrl?: string | null }) => Promise<{ success: boolean; message?: string }>;
+  syncCommunitySkins?: (instanceDir?: string) => Promise<number>;
 }
 
 declare global {

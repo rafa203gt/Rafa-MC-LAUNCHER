@@ -385,3 +385,21 @@ ipcMain.handle('window:maximize', () => {
 ipcMain.handle('window:close', () => {
   if (mainWindow) mainWindow.close();
 });
+
+// 11. Custom Community Skins Management (Supabase & CustomSkinLoader)
+ipcMain.handle('skins:get-user', async (_event, username: string) => {
+  const { skinManager } = await import('./skin-manager');
+  return skinManager.getUserSkin(username);
+});
+
+ipcMain.handle('skins:save-user', async (_event, data: any) => {
+  const { skinManager } = await import('./skin-manager');
+  return skinManager.saveUserSkin(data);
+});
+
+ipcMain.handle('skins:sync-community', async (_event, instanceDir?: string) => {
+  const { skinManager } = await import('./skin-manager');
+  const targetDir = instanceDir || configStore.getInstanceDir();
+  return skinManager.syncCommunitySkinsToInstance(targetDir);
+});
+
