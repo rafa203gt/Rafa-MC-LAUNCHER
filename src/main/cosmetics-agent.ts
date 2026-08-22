@@ -126,16 +126,12 @@ export class CosmeticsAgentManager {
         if (skinPath && fs.existsSync(skinPath)) {
           const skinBuffer = fs.readFileSync(skinPath);
           if (skinBuffer.length > 100) {
-            // Reemplazo de skins base en Minecraft 1.20+ (Wide y Slim)
-            zip.addFile('assets/minecraft/textures/entity/player/wide/steve.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/alex.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/ari.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/efe.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/kai.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/makena.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/noor.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/sunny.png', skinBuffer);
-            zip.addFile('assets/minecraft/textures/entity/player/slim/zuri.png', skinBuffer);
+            // Reemplazo de TODAS las skins base en Minecraft 1.20+ (9 modelos Wide y 9 modelos Slim)
+            const defaultModels = ['steve', 'alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'sunny', 'zuri'];
+            for (const model of defaultModels) {
+              zip.addFile(`assets/minecraft/textures/entity/player/wide/${model}.png`, skinBuffer);
+              zip.addFile(`assets/minecraft/textures/entity/player/slim/${model}.png`, skinBuffer);
+            }
 
             // Reemplazo de skins base en Minecraft Legacy (1.8 a 1.19)
             zip.addFile('assets/minecraft/textures/entity/steve.png', skinBuffer);

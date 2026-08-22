@@ -152,19 +152,40 @@ export class SkinManager {
       return localPngPath;
     }
 
-    // Si no existe, intentar obtenerla desde la caché/base de datos
-    const skinData = await this.getUserSkin(cleanUsername);
-    if (skinData?.skinData && skinData.skinData.startsWith('data:image/png;base64,')) {
-      const base64Data = skinData.skinData.replace(/^data:image\/png;base64,/, '');
-      const buf = Buffer.from(base64Data, 'base64');
-      fs.writeFileSync(localPngPath, buf);
-      return localPngPath;
-    } else if (skinData?.skinUrl && skinData.skinUrl.startsWith('http')) {
-      try {
-        await this.downloadSkinFile(skinData.skinUrl, localPngPath);
+    // 2. Si no existe en local, intentar obtenerla desde la base de datos o Supabase
+    try {
+      const skinData = await this.getUserSkin(cleanUsername);
+      if (skinData?.skinData && skinData.skinData.startsWith('data:image/png;base64,')) {
+        const base64Data = skinData.skinData.replace(/^data:image\/png;base64,/, '');
+        const buf = Buffer.from(base64Data, 'base64');
+        fs.writeFileSync(localPngPath, buf);
         return localPngPath;
-      } catch {}
-    }
+      } else if (skinData?.skinUrl && skinData.skinUrl.startsWith('http')) {
+        try {
+          await this.downloadSkinFile(skinData.skinUrl, localPngPath);
+          if (fs.existsSync(localPngPath) && fs.statSync(localPngPath).size > 100) {
+            return localPngPath;
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // 3. Fallback Universal: Descargar automáticamente la skin oficial de Mojang/Minotar para el username
+    try {
+      const fallbackUrls = [
+        `https://minotar.net/skin/${encodeURIComponent(cleanUsername)}`,
+        `https://mineskin.eu/skin/${encodeURIComponent(cleanUsername)}`
+      ];
+
+      for (const url of fallbackUrls) {
+        try {
+          await this.downloadSkinFile(url, localPngPath);
+          if (fs.existsSync(localPngPath) && fs.statSync(localPngPath).size > 100) {
+            return localPngPath;
+          }
+        } catch {}
+      }
+    } catch {}
 
     return fs.existsSync(localPngPath) ? localPngPath : null;
   }
