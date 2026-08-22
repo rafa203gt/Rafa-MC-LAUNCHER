@@ -16,6 +16,7 @@ export interface AppSettings {
   width: number;
   height: number;
   jvmArgs: string[];
+  discordRpc?: boolean;
 }
 
 export interface ServerStatusResult {
@@ -81,6 +82,8 @@ export interface MinecraftInstance {
   icon?: string;
   author?: string;
   customRam?: number;
+  serverIp?: string;
+  serverPort?: number;
   totalMods?: number;
   isDefault?: boolean;
   isActive?: boolean;

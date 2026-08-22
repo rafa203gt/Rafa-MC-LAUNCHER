@@ -14,7 +14,8 @@ import {
   ExternalLink,
   Box,
   UserCheck,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import {
   supabase,
@@ -22,7 +23,8 @@ import {
   NewsAnnouncement,
   ModpackMod,
   CrashReport,
-  RemoteInstance
+  RemoteInstance,
+  Shaderpack
 } from './supabase';
 import { ConfigEditor } from './components/ConfigEditor';
 import { MaintenanceToggle } from './components/MaintenanceToggle';
@@ -30,6 +32,7 @@ import { BannerAlertManager } from './components/BannerAlertManager';
 import { NewsManager } from './components/NewsManager';
 import { ModpackManager } from './components/ModpackManager';
 import { InstancesManager } from './components/InstancesManager';
+import { ShadersManager } from './components/ShadersManager';
 import { CrashAnalytics } from './components/CrashAnalytics';
 import { LiveServerMonitor } from './components/LiveServerMonitor';
 
@@ -43,12 +46,13 @@ export const App: React.FC = () => {
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<
-    'instances' | 'mods' | 'config' | 'maintenance' | 'banner' | 'news' | 'crashes' | 'monitor'
+    'instances' | 'mods' | 'shaders' | 'config' | 'maintenance' | 'banner' | 'news' | 'crashes' | 'monitor'
   >('instances');
   const [config, setConfig] = useState<LauncherConfig | null>(null);
   const [instances, setInstances] = useState<RemoteInstance[]>([]);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
   const [mods, setMods] = useState<ModpackMod[]>([]);
+  const [shaders, setShaders] = useState<Shaderpack[]>([]);
   const [crashes, setCrashes] = useState<CrashReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -142,7 +146,14 @@ export const App: React.FC = () => {
         .order('mod_name', { ascending: true });
       if (modsData) setMods(modsData as ModpackMod[]);
 
-      // 5. Crashes
+      // 5. Shaders
+      const { data: shadersData } = await supabase
+        .from('shaderpacks')
+        .select('*')
+        .order('name', { ascending: true });
+      if (shadersData) setShaders(shadersData as Shaderpack[]);
+
+      // 6. Crashes
       const { data: crashData } = await supabase
         .from('crash_reports')
         .select('*')
@@ -173,6 +184,13 @@ export const App: React.FC = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'instances' },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shaderpacks' },
         () => {
           fetchData();
         }
@@ -376,6 +394,18 @@ export const App: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('shaders')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeTab === 'shaders'
+                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-admin-card'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            Shaders ({shaders.length})
+          </button>
+
+          <button
             onClick={() => setActiveTab('config')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
               activeTab === 'config'
@@ -435,7 +465,7 @@ export const App: React.FC = () => {
             onClick={() => setActiveTab('news')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
               activeTab === 'news'
-                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/20'
                 : 'text-slate-400 hover:text-white hover:bg-admin-card'
             }`}
           >
@@ -465,6 +495,10 @@ export const App: React.FC = () => {
 
             {activeTab === 'mods' && (
               <ModpackManager mods={mods} instances={instances} onRefresh={fetchData} />
+            )}
+
+            {activeTab === 'shaders' && (
+              <ShadersManager shaders={shaders} onRefresh={fetchData} />
             )}
 
             {activeTab === 'config' && (

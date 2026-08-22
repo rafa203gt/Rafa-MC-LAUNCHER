@@ -3,11 +3,13 @@ import { FolderOpen, Camera, Save, Package, FileText, RefreshCw, CheckCircle2, S
 
 interface QuickToolsBarProps {
   onReinstallModpack?: () => void;
+  onOpenShaders?: () => void;
   isModded: boolean;
 }
 
 export const QuickToolsBar: React.FC<QuickToolsBarProps> = ({
   onReinstallModpack,
+  onOpenShaders,
   isModded
 }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -41,6 +43,16 @@ export const QuickToolsBar: React.FC<QuickToolsBarProps> = ({
 
       {/* Buttons Row */}
       <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-end">
+        {onOpenShaders && (
+          <button
+            onClick={onOpenShaders}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 rounded-xl text-xs text-amber-300 hover:text-white transition-all active:scale-95 shadow-md"
+            title="Instalador y Gestor de Shaders"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Shaders 1-Clic</span>
+          </button>
+        )}
         <button
           onClick={() => handleOpen('instance', 'Instancia')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-mc-darker hover:bg-slate-800/80 border border-mc-border hover:border-slate-600 rounded-xl text-xs text-slate-300 hover:text-white transition-all active:scale-95"

@@ -14,6 +14,8 @@ export interface MinecraftInstance {
   icon?: string;
   author?: string;
   customRam?: number;
+  serverIp?: string;
+  serverPort?: number;
   totalMods?: number;
   isDefault?: boolean;
   isActive?: boolean;

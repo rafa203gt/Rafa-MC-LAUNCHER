@@ -71,6 +71,19 @@ export interface ModpackMod {
   updated_at: string;
 }
 
+export interface Shaderpack {
+  id: string;
+  name: string;
+  description: string;
+  performance_tier: 'fast' | 'balanced' | 'ultra';
+  download_url: string;
+  file_name: string;
+  file_size: number;
+  preview_image?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface CrashReport {
   id: string;
   username: string;

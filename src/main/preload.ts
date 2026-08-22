@@ -52,6 +52,22 @@ export const API = {
     return () => ipcRenderer.removeListener('updater:progress', handler);
   },
 
+  // Shaders & Graphics Manager
+  getShaders: (instanceId?: string) => ipcRenderer.invoke('shaders:list', instanceId),
+  downloadShader: (downloadUrl: string, fileName: string, instanceId?: string) =>
+    ipcRenderer.invoke('shaders:download', downloadUrl, fileName, instanceId),
+  deleteShader: (fileName: string, instanceId?: string) =>
+    ipcRenderer.invoke('shaders:delete', fileName, instanceId),
+  openShaderFolder: (instanceId?: string) => ipcRenderer.invoke('shaders:open-folder', instanceId),
+  onShaderProgress: (callback: (data: { fileName: string; progress: number }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('shaders:progress', handler);
+    return () => ipcRenderer.removeListener('shaders:progress', handler);
+  },
+
+  // Discord Rich Presence
+  setDiscordRpcEnabled: (enabled: boolean) => ipcRenderer.invoke('discord-rpc:set-enabled', enabled),
+
   // Event Listeners
   onProgress: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);

@@ -140,7 +140,14 @@ ipcMain.handle('instances:active', async () => {
 });
 
 ipcMain.handle('instances:switch', async (_event, instanceId: string) => {
-  return instanceManager.setActiveInstance(instanceId);
+  const inst = instanceManager.setActiveInstance(instanceId);
+  const { discordRPC } = await import('./discord-rpc');
+  discordRPC.updateActivity({
+    instanceName: inst.name,
+    serverIp: inst.serverIp || configStore.getSettings().serverIp,
+    isPlaying: false
+  });
+  return inst;
 });
 
 ipcMain.handle('instances:create', async (_event, data: any) => {
@@ -155,6 +162,15 @@ ipcMain.handle('instances:delete', async (_event, instanceId: string) => {
 ipcMain.handle('launcher:launch', async (_event, options) => {
   if (!mainWindow) return;
 
+  const { discordRPC } = await import('./discord-rpc');
+  const activeInst = instanceManager.getActiveInstance();
+  discordRPC.updateActivity({
+    instanceName: activeInst?.name || 'All the Mods 10',
+    serverIp: activeInst?.serverIp || configStore.getSettings().serverIp,
+    isPlaying: true,
+    startTimestamp: Math.floor(Date.now() / 1000)
+  });
+
   return minecraftLauncher.launch(
     options,
     (progress) => {
@@ -167,7 +183,12 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
         mainWindow.webContents.send('launcher:log', log);
       }
     },
-    (code) => {
+    async (code) => {
+      discordRPC.updateActivity({
+        instanceName: activeInst?.name || 'All the Mods 10',
+        serverIp: activeInst?.serverIp || configStore.getSettings().serverIp,
+        isPlaying: false
+      });
       if (code !== 0 && code !== null) {
         const settings = configStore.getSettings();
         remoteConfigManager.reportCrash({
@@ -234,7 +255,40 @@ ipcMain.handle('remote:news', async () => {
   return remoteConfigManager.fetchNews();
 });
 
-// 7. Window Controls
+// 7. Shaders & Graphics Manager
+ipcMain.handle('shaders:list', async (_event, instanceId?: string) => {
+  const { shaderManager } = await import('./shader-manager');
+  return shaderManager.getAvailableShaders(instanceId);
+});
+
+ipcMain.handle('shaders:download', async (_event, downloadUrl: string, fileName: string, instanceId?: string) => {
+  const { shaderManager } = await import('./shader-manager');
+  return shaderManager.downloadShader(downloadUrl, fileName, instanceId, (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('shaders:progress', { fileName, progress });
+    }
+  });
+});
+
+ipcMain.handle('shaders:delete', async (_event, fileName: string, instanceId?: string) => {
+  const { shaderManager } = await import('./shader-manager');
+  return shaderManager.deleteShader(fileName, instanceId);
+});
+
+ipcMain.handle('shaders:open-folder', async (_event, instanceId?: string) => {
+  const { shaderManager } = await import('./shader-manager');
+  shaderManager.openShaderFolder(instanceId);
+  return true;
+});
+
+// 8. Discord Rich Presence
+ipcMain.handle('discord-rpc:set-enabled', async (_event, enabled: boolean) => {
+  const { discordRPC } = await import('./discord-rpc');
+  discordRPC.setEnabled(enabled);
+  return true;
+});
+
+// 9. Window Controls
 ipcMain.handle('window:minimize', () => {
   if (mainWindow) mainWindow.minimize();
 });

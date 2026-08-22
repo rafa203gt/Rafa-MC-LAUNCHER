@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Cpu, Coffee, Server, Monitor, Save, Folder, CheckCircle } from 'lucide-react';
+import { Settings, Cpu, Coffee, Server, Monitor, Save, Folder, CheckCircle, Sparkles } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -237,6 +237,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onSave }
                 />
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Discord Rich Presence Card */}
+        <div className="bg-mc-card border border-mc-border rounded-2xl p-6 space-y-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            Discord Rich Presence (RPC)
+          </h3>
+
+          <div className="space-y-3">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.discordRpc !== false}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setFormData({ ...formData, discordRpc: val });
+                  if ((window as any).launcherAPI?.setDiscordRpcEnabled) {
+                    (window as any).launcherAPI.setDiscordRpcEnabled(val);
+                  }
+                }}
+                className="w-4 h-4 rounded bg-mc-darker border-mc-border text-emerald-500 focus:ring-0 cursor-pointer accent-emerald-500"
+              />
+              <span className="text-xs text-slate-200 font-semibold">
+                Mostrar estado y tiempo de juego en Discord
+              </span>
+            </label>
+            <p className="text-[11px] text-slate-400">
+              Muestra a tus amigos de Discord el modpack que estás jugando y el tiempo de sesión en vivo.
+            </p>
           </div>
         </div>
       </div>

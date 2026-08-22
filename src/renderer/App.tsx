@@ -10,6 +10,8 @@ import { ModpackView } from './components/ModpackView';
 import { InstancesView } from './components/InstancesView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConsoleModal } from './components/ConsoleModal';
+import { ShadersModal } from './components/ShadersModal';
+import { Skin3DViewer } from './components/Skin3DViewer';
 import {
   AppSettings,
   ServerStatusResult,
@@ -25,6 +27,7 @@ export const App: React.FC = () => {
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
+  const [isShadersOpen, setIsShadersOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     username: 'Jugador',
     minRam: 2048,
@@ -42,7 +45,8 @@ export const App: React.FC = () => {
     fullscreen: false,
     width: 1280,
     height: 720,
-    jvmArgs: []
+    jvmArgs: [],
+    discordRpc: true
   });
 
   const [username, setUsername] = useState('Jugador');
@@ -52,21 +56,32 @@ export const App: React.FC = () => {
   const [progress, setProgress] = useState<ProgressEventPayload | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
+  // Load instances
   const loadInstances = useCallback(async () => {
     try {
       if (window.launcherAPI?.getInstances) {
         const list = await window.launcherAPI.getInstances();
-        setInstances(list || []);
-      }
-      if (window.launcherAPI?.getActiveInstance) {
-        const active = await window.launcherAPI.getActiveInstance();
-        if (active) setActiveInstance(active);
+        setInstances(list);
+        const active = list.find((i) => i.isActive) || list[0];
+        if (active) {
+          setActiveInstance(active);
+          setSettings((prev) => ({
+            ...prev,
+            serverName: active.name,
+            minecraftVersion: active.minecraftVersion,
+            modLoader: active.modLoader,
+            modLoaderVersion: active.modLoaderVersion,
+            modpackManifestUrl: active.modpackManifestUrl,
+            maxRam: active.customRam || prev.maxRam
+          }));
+        }
       }
     } catch (err) {
-      console.warn('Error cargando instancias:', err);
+      console.error('Error loading instances:', err);
     }
   }, []);
 
+  // Load Supabase remote config & news
   const loadRemoteData = useCallback(async () => {
     try {
       if (window.launcherAPI?.getRemoteConfig) {
@@ -122,7 +137,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     checkServerStatus();
-    const interval = setInterval(checkServerStatus, 30000); // refresh every 30s
+    const interval = setInterval(checkServerStatus, 30000);
     return () => clearInterval(interval);
   }, [checkServerStatus]);
 
@@ -141,7 +156,7 @@ export const App: React.FC = () => {
       setLogs((prev) => [...prev.slice(-300), log]);
     });
 
-    const unbindClosed = window.launcherAPI.onGameClosed((code) => {
+    const unbindClosed = window.launcherAPI.onGameClosed(() => {
       setIsLaunching(false);
       setProgress(null);
     });
@@ -191,7 +206,6 @@ export const App: React.FC = () => {
     });
 
     try {
-      // Save current username
       if (window.launcherAPI?.saveSettings) {
         await window.launcherAPI.saveSettings({ username, maxRam: settings.maxRam });
       }
@@ -203,8 +217,10 @@ export const App: React.FC = () => {
         autoConnect: settings.autoConnect
       });
     } catch (err: any) {
+      console.error('Error lanzando Minecraft:', err);
       setIsLaunching(false);
-      console.error('Launch failed:', err);
+      setProgress(null);
+      alert(`Error al iniciar Minecraft: ${err.message}`);
     }
   };
 
@@ -215,6 +231,7 @@ export const App: React.FC = () => {
         setActiveInstance(updated);
         setSettings((prev) => ({
           ...prev,
+          serverName: updated.name,
           minecraftVersion: updated.minecraftVersion,
           modLoader: updated.modLoader,
           modLoaderVersion: updated.modLoaderVersion,
@@ -244,7 +261,11 @@ export const App: React.FC = () => {
   };
 
   const handleReinstallModpack = async () => {
-    if (!confirm('¿Deseas reparar y reinstalar el modpack? Esto restaurará cualquier archivo dañado o faltante sin borrar tus mundos.')) {
+    if (
+      !confirm(
+        '¿Deseas reparar y reinstalar el modpack? Esto restaurará cualquier archivo dañado o faltante sin borrar tus mundos.'
+      )
+    ) {
       return;
     }
     try {
@@ -291,23 +312,34 @@ export const App: React.FC = () => {
               onRefresh={checkServerStatus}
             />
 
-            <PlayControls
-              username={username}
-              setUsername={setUsername}
-              maxRam={settings.maxRam}
-              onRamChange={handleRamChange}
-              activeInstance={activeInstance}
-              instances={instances}
-              onSwitchInstance={handleSwitchInstance}
-              isLaunching={isLaunching}
-              progress={progress}
-              onLaunch={handleLaunch}
-            />
+            {/* Split Grid: Play Controls + 3D Skin Viewer */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              <div className="lg:col-span-2 space-y-6">
+                <PlayControls
+                  username={username}
+                  setUsername={setUsername}
+                  maxRam={settings.maxRam}
+                  onRamChange={handleRamChange}
+                  activeInstance={activeInstance}
+                  instances={instances}
+                  onSwitchInstance={handleSwitchInstance}
+                  isLaunching={isLaunching}
+                  progress={progress}
+                  onLaunch={handleLaunch}
+                />
 
-            <QuickToolsBar
-              onReinstallModpack={isModded ? handleReinstallModpack : undefined}
-              isModded={isModded}
-            />
+                <QuickToolsBar
+                  onReinstallModpack={isModded ? handleReinstallModpack : undefined}
+                  onOpenShaders={() => setIsShadersOpen(true)}
+                  isModded={isModded}
+                />
+              </div>
+
+              {/* 3D Skin Viewer Column */}
+              <div className="flex flex-col items-center justify-center bg-mc-card/60 backdrop-blur-md border border-mc-border/80 rounded-3xl p-4 shadow-xl">
+                <Skin3DViewer username={username} width={220} height={260} />
+              </div>
+            </div>
 
             {/* Live Community News from Supabase */}
             <NewsFeedCard news={news} />
@@ -345,6 +377,13 @@ export const App: React.FC = () => {
           <ConsoleModal logs={logs} onClear={() => setLogs([])} />
         )}
       </main>
+
+      {/* 1-Click Shaders Modal */}
+      <ShadersModal
+        isOpen={isShadersOpen}
+        onClose={() => setIsShadersOpen(false)}
+        instanceId={activeInstance?.id}
+      />
     </div>
   );
 };
