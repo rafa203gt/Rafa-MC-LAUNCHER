@@ -145,121 +145,6 @@ export class CosmeticsAgentManager {
             }
           }
         }
-      } catch (skinInjectErr) {
-        console.warn('[CosmeticsAgent] Error inyectando skin en el resourcepack:', skinInjectErr);
-      }
-    }
-
-    // 2. Modelos 3D CEM para EMF / ETF / Vanilla CEM
-    // Alas de Dragón 3D (con huesos animados y aleteo dinámico)
-    const dragonWingsJem = {
-      models: [
-        {
-          part: 'body',
-          id: 'dragon_wings_left',
-          invertAxis: 'xy',
-          translate: [0, 24, 0],
-          boxes: [
-            {
-              coordinates: [-12, 10, 2, 12, 14, 1],
-              textureOffset: [0, 0]
-            }
-          ],
-          animations: [
-            {
-              'dragon_wings_left.ry': 'sin(time * 0.3) * 0.6 + 0.3',
-              'dragon_wings_left.rz': 'cos(time * 0.3) * 0.15'
-            }
-          ]
-        },
-        {
-          part: 'body',
-          id: 'dragon_wings_right',
-          invertAxis: 'xy',
-          translate: [0, 24, 0],
-          boxes: [
-            {
-              coordinates: [0, 10, 2, 12, 14, 1],
-              textureOffset: [0, 16]
-            }
-          ],
-          animations: [
-            {
-              'dragon_wings_right.ry': '-sin(time * 0.3) * 0.6 - 0.3',
-              'dragon_wings_right.rz': '-cos(time * 0.3) * 0.15'
-            }
-          ]
-        }
-      ]
-    };
-
-    // Corona Imperial 3D (acoplada a la cabeza)
-    const crownJem = {
-      models: [
-        {
-          part: 'head',
-          id: 'king_crown_3d',
-          invertAxis: 'xy',
-          translate: [0, 0, 0],
-          boxes: [
-            {
-              coordinates: [-4.5, 8.0, -4.5, 9, 3, 9],
-              textureOffset: [0, 32]
-            }
-          ]
-        }
-      ]
-    };
-
-    // Halo Celestial 3D (flotando con rotación)
-    const haloJem = {
-      models: [
-        {
-          part: 'head',
-          id: 'celestial_halo_3d',
-          invertAxis: 'xy',
-          translate: [0, 0, 0],
-          boxes: [
-            {
-              coordinates: [-5, 12, -5, 10, 1, 10],
-              textureOffset: [0, 48]
-            }
-          ],
-          animations: [
-            {
-              'celestial_halo_3d.ry': 'time * 0.05',
-              'celestial_halo_3d.ty': 'sin(time * 0.1) * 0.5'
-            }
-          ]
-        }
-      ]
-    };
-
-    // Bandana Ninja 3D (acoplada al tercio inferior de la cara)
-    const bandanaJem = {
-      models: [
-        {
-          part: 'head',
-          id: 'ninja_bandana_3d',
-          invertAxis: 'xy',
-          translate: [0, 0, 0],
-          boxes: [
-            {
-              coordinates: [-4.2, 0.0, -4.2, 8.4, 4.2, 8.4],
-              textureOffset: [32, 0]
-            }
-          ]
-        }
-      ]
-    };
-
-    // Guardar modelos en assets/minecraft/optifine/cem/ y assets/minecraft/emf/models/
-    zip.addFile('assets/minecraft/optifine/cem/player.jem', Buffer.from(JSON.stringify(dragonWingsJem, null, 2), 'utf-8'));
-    zip.addFile('assets/minecraft/emf/models/dragon_wings.jem', Buffer.from(JSON.stringify(dragonWingsJem, null, 2), 'utf-8'));
-    zip.addFile('assets/minecraft/emf/models/crown.jem', Buffer.from(JSON.stringify(crownJem, null, 2), 'utf-8'));
-    zip.addFile('assets/minecraft/emf/models/halo.jem', Buffer.from(JSON.stringify(haloJem, null, 2), 'utf-8'));
-    zip.addFile('assets/minecraft/emf/models/bandana.jem', Buffer.from(JSON.stringify(bandanaJem, null, 2), 'utf-8'));
-
     // Guardar paquete ZIP en disco
     zip.writeZip(packZipPath);
 
@@ -267,10 +152,40 @@ export class CosmeticsAgentManager {
     this.ensureResourcepackActiveInOptions(instanceDir);
 
     if (onLog) {
-      onLog('[CosmeticsEngine] Paquete de Modelos 3D y Capas RafaCosmeticsPack.zip generado y activado.');
+      onLog('[CosmeticsEngine] Paquete de Modelos 3D RafaCosmeticsPack.zip generado para ' + multiplayerData.length + ' jugadores.');
     }
 
     return packZipPath;
+  }
+
+  private async ensureEMFMods(instanceDir: string, onLog?: (l: string) => void) {
+    const modsDir = path.join(instanceDir, 'mods');
+    fs.mkdirSync(modsDir, { recursive: true });
+
+    const emfUrl = 'https://cdn.modrinth.com/data/4I1XuqiY/versions/PAYgk63v/entity_model_features-3.2.4-1.21-neoforge.jar';
+    const etfUrl = 'https://cdn.modrinth.com/data/BVzZfTc1/versions/YEMROAHv/entity_texture_features_1.21-neoforge-7.1.jar';
+    
+    const emfPath = path.join(modsDir, 'entity_model_features-3.2.4-1.21-neoforge.jar');
+    const etfPath = path.join(modsDir, 'entity_texture_features_1.21-neoforge-7.1.jar');
+
+    try {
+      if (!fs.existsSync(emfPath)) {
+        if (onLog) onLog('[CosmeticsEngine] Descargando mod EMF (Entity Model Features)...');
+        const res = await axios.get(emfUrl, { responseType: 'stream' });
+        const writer = fs.createWriteStream(emfPath);
+        res.data.pipe(writer);
+        await new Promise((resolve) => writer.on('finish', resolve));
+      }
+      if (!fs.existsSync(etfPath)) {
+        if (onLog) onLog('[CosmeticsEngine] Descargando mod ETF (Entity Texture Features)...');
+        const res = await axios.get(etfUrl, { responseType: 'stream' });
+        const writer = fs.createWriteStream(etfPath);
+        res.data.pipe(writer);
+        await new Promise((resolve) => writer.on('finish', resolve));
+      }
+    } catch (e) {
+      if (onLog) onLog('[CosmeticsEngine] Error descargando mods EMF/ETF: ' + e);
+    }
   }
 
   /**
@@ -363,7 +278,7 @@ export class CosmeticsAgentManager {
       fs.writeFileSync(multiplayerMapPath, JSON.stringify(equippedRows, null, 2), 'utf-8');
 
       // Generar y actualizar el Resourcepack 3D & Skin Vanilla
-      await this.ensure3DCosmeticsResourcepack(instanceDir, onLog, playerUsername);
+      await this.ensure3DCosmeticsResourcepack(instanceDir, onLog, playerUsername, equippedRows);
 
       if (onLog) {
         onLog(`[CosmeticsSync] ✅ Sincronizados cosméticos de ${equippedRows.length} jugadores en el servidor.`);
