@@ -85,7 +85,7 @@ export const CloudAssetManager: React.FC = () => {
   const [newShaderFile, setNewShaderFile] = useState('');
 
   // Load instances from Supabase
-  const loadInstances = async () => {
+  const loadInstances = async (targetId?: string) => {
     try {
       let { data, error } = await supabase.from('instances').select('*').order('created_at', { ascending: true });
       if (error || !data || data.length === 0) {
@@ -95,10 +95,12 @@ export const CloudAssetManager: React.FC = () => {
 
       if (data && data.length > 0) {
         setInstances(data);
-        const current = data.find((inst) => inst.id === selectedInstanceId) || data[0];
+        const wantedId = targetId || selectedInstanceId;
+        const current = data.find((inst) => inst.id === wantedId) || data[0];
         setSelectedInstanceId(current.id);
         setSelectedInstance(current);
         setInstanceParamsDraft(current);
+        await loadInstanceData(current.id);
       }
     } catch (err: any) {
       console.warn('Error cargando instancias:', err.message);
@@ -109,17 +111,22 @@ export const CloudAssetManager: React.FC = () => {
     loadInstances();
   }, []);
 
-  // When instance changes, reload its assets, mods, configs and shaders
-  useEffect(() => {
-    if (selectedInstanceId) {
-      const inst = instances.find((i) => i.id === selectedInstanceId);
-      if (inst) {
-        setSelectedInstance(inst);
-        setInstanceParamsDraft(inst);
-        loadInstanceData(inst.id);
-      }
+  const handleSelectInstance = (newId: string) => {
+    setSelectedInstanceId(newId);
+    const inst = instances.find((i) => i.id === newId);
+    if (inst) {
+      setSelectedInstance(inst);
+      setInstanceParamsDraft(inst);
+      // Limpiar inmediatamente estado de la instancia anterior para evitar contaminación cruzada
+      setMods([]);
+      setConfigsList([]);
+      setShadersList([]);
+      setActiveConfigIndex(0);
+      setConfigDraft('');
+      setSearchTerm('');
+      loadInstanceData(newId);
     }
-  }, [selectedInstanceId]);
+  };
 
   useEffect(() => {
     if (configsList[activeConfigIndex]) {
@@ -129,11 +136,11 @@ export const CloudAssetManager: React.FC = () => {
     }
   }, [activeConfigIndex, configsList]);
 
-  // Load mods, configs and shaders for the selected instance
+  // Load mods, configs and shaders strictly for the selected instance
   const loadInstanceData = async (instanceId: string) => {
     setIsLoading(true);
     try {
-      // 1. Fetch all items from modpack_mods for this instance
+      // 1. Fetch all items from modpack_mods for this specific instance
       const { data: modsData, error: modsError } = await supabase
         .from('modpack_mods')
         .select('*')
@@ -141,14 +148,22 @@ export const CloudAssetManager: React.FC = () => {
         .order('mod_name', { ascending: true });
 
       if (!modsError && modsData) {
-        // Mods tab
-        const modsOnly = modsData.filter((m) => m.category === 'mods' || !m.category || m.file_name.endsWith('.jar'));
+        // Mods tab: only actual mods (.jar or category === 'mod'/'mods')
+        const modsOnly = modsData.filter(
+          (m) =>
+            (m.category === 'mod' || m.category === 'mods' || !m.category) &&
+            !m.file_path.startsWith('config/') &&
+            !m.file_path.startsWith('defaultconfigs/') &&
+            !m.file_path.startsWith('shaderpacks/') &&
+            (m.file_name.endsWith('.jar') || m.file_path.startsWith('mods/'))
+        );
         setMods(modsOnly);
 
-        // Configs tab
+        // Configs tab: actual config files for this instance
         const configsFromDb = modsData.filter(
           (m) =>
             m.category === 'config' ||
+            m.category === 'configs' ||
             m.file_path.startsWith('config/') ||
             m.file_path.startsWith('defaultconfigs/') ||
             m.file_path.startsWith('kubejs/') ||
@@ -178,33 +193,49 @@ export const CloudAssetManager: React.FC = () => {
           })
         );
 
+        setConfigsList(loadedConfigs);
+        setActiveConfigIndex(0);
         if (loadedConfigs.length > 0) {
-          setConfigsList(loadedConfigs);
+          setConfigDraft(loadedConfigs[0].content);
         } else {
-          setConfigsList([
-            {
-              name: 'config/jei-client.ini',
-              path: 'config/jei-client.ini',
-              content: '# Just Enough Items Configuration\n[advanced]\ncheatItemsEnabled = false\ncenterSearchBar = true\n'
-            },
-            {
-              name: 'config/modernfix-client.toml',
-              path: 'config/modernfix-client.toml',
-              content: '# ModernFix Performance Settings\n[perf]\noptimize_entity_rendering = true\ndeduplicate_strings = true\n'
-            },
-            {
-              name: 'defaultconfigs/ftbquests/client.snbt',
-              path: 'defaultconfigs/ftbquests/client.snbt',
-              content: '{\n  show_chapter_arrows: true,\n  theme: "dark"\n}'
-            }
-          ]);
+          setConfigDraft('');
         }
-      }
 
-      // 2. Fetch Shaders from shaderpacks table and modpack_mods
-      const { data: shaderTableData } = await supabase.from('shaderpacks').select('*').order('name', { ascending: true });
-      if (shaderTableData) {
-        setShadersList(shaderTableData);
+        // Shaders tab: shaders belonging to this instance
+        const shadersFromMods = modsData.filter(
+          (m) =>
+            m.category === 'shaders' ||
+            m.category === 'shader' ||
+            m.file_path.startsWith('shaderpacks/') ||
+            (m.file_name.endsWith('.zip') && !m.file_path.startsWith('mods/'))
+        );
+
+        const instanceShaders: Shaderpack[] = shadersFromMods.map((s) => ({
+          id: s.id,
+          name: s.mod_name || s.file_name.replace(/\.zip$/i, ''),
+          description: `Shaderpack de ${instanceId}`,
+          performance_tier: 'balanced',
+          download_url: s.download_url,
+          file_name: s.file_name,
+          file_size: Number(s.file_size) || 0,
+          is_active: s.is_enabled
+        }));
+
+        // Merge with global shaderpacks from table if appropriate
+        const { data: shaderTableData } = await supabase.from('shaderpacks').select('*').order('name', { ascending: true });
+        const mergedShaders = [...instanceShaders];
+        if (shaderTableData) {
+          shaderTableData.forEach((st) => {
+            if (!mergedShaders.some((s) => s.name === st.name || s.file_name === st.file_name)) {
+              mergedShaders.push(st);
+            }
+          });
+        }
+        setShadersList(mergedShaders);
+      } else {
+        setMods([]);
+        setConfigsList([]);
+        setShadersList([]);
       }
     } catch (err) {
       console.warn(`Error cargando datos para ${instanceId}:`, err);
@@ -626,7 +657,7 @@ export const CloudAssetManager: React.FC = () => {
     try {
       setIsLoading(true);
       const cleanId = newId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-      const { error } = await supabase.from('remote_instances').insert({
+      const newInstancePayload = {
         id: cleanId,
         name: `${selectedInstance.name} (Copia)`,
         description: selectedInstance.description,
@@ -640,12 +671,21 @@ export const CloudAssetManager: React.FC = () => {
         is_official: false,
         is_default: false,
         is_active: true
-      });
+      };
 
-      if (error) throw error;
+      let { error } = await supabase.from('instances').insert(newInstancePayload);
+      if (error) {
+        await supabase.from('remote_instances').insert(newInstancePayload);
+      }
 
-      if (mods.length > 0) {
-        const clonedMods = mods.map((m) => ({
+      // Clone ALL files (mods, configs, shaders) from selectedInstance to the new instance
+      const { data: allInstanceFiles } = await supabase
+        .from('modpack_mods')
+        .select('*')
+        .eq('instance_id', selectedInstance.id);
+
+      if (allInstanceFiles && allInstanceFiles.length > 0) {
+        const clonedFiles = allInstanceFiles.map((m) => ({
           instance_id: cleanId,
           mod_name: m.mod_name,
           file_name: m.file_name,
@@ -656,12 +696,11 @@ export const CloudAssetManager: React.FC = () => {
           is_enabled: m.is_enabled,
           category: m.category
         }));
-        await supabase.from('modpack_mods').insert(clonedMods);
+        await supabase.from('modpack_mods').insert(clonedFiles);
       }
 
-      alert(`🎉 ¡Instancia clonada exitosamente como "${cleanId}"!`);
-      await loadInstances();
-      setSelectedInstanceId(cleanId);
+      alert(`🎉 ¡Instancia clonada exitosamente como "${cleanId}" con todos sus mods, configs y shaders!`);
+      await loadInstances(cleanId);
     } catch (err: any) {
       alert(`Error clonando instancia: ${err.message}`);
     } finally {
@@ -729,7 +768,7 @@ export const CloudAssetManager: React.FC = () => {
 
             <select
               value={selectedInstanceId}
-              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              onChange={(e) => handleSelectInstance(e.target.value)}
               className="bg-slate-950 border border-indigo-500/40 text-white font-bold text-sm rounded-xl px-3.5 py-2 outline-none focus:border-indigo-400 transition-all cursor-pointer shadow-inner"
             >
               {instances.map((inst) => (
@@ -738,6 +777,15 @@ export const CloudAssetManager: React.FC = () => {
                 </option>
               ))}
             </select>
+
+            <button
+              onClick={() => selectedInstance && loadInstanceData(selectedInstance.id)}
+              disabled={isLoading}
+              className="p-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-xl transition-all"
+              title="Refrescar datos de la instancia seleccionada"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
+            </button>
 
             <button
               onClick={() => setIsEditingParams(!isEditingParams)}
@@ -1106,64 +1154,82 @@ export const CloudAssetManager: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Sidebar list of configs */}
-            <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-2">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-                <h4 className="text-xs font-bold text-slate-400 uppercase">Archivos ({configsList.length})</h4>
+          {configsList.length === 0 ? (
+            <div className="text-center py-16 bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl p-8 space-y-4 shadow-inner">
+              <FileCode className="w-10 h-10 text-indigo-400 mx-auto opacity-70" />
+              <div>
+                <h4 className="text-sm font-bold text-white">No hay archivos de configuración en esta instancia</h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                  Puedes crear un nuevo archivo (ej: <code>config/jei-client.ini</code>) o subir configs arriba (.toml, .json, .snbt, .cfg, .ini) para sincronizarlos con los jugadores.
+                </p>
               </div>
-              <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
-                {configsList.map((cfg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center justify-between p-2 rounded-xl text-xs font-mono transition-all group ${
-                      activeConfigIndex === idx
-                        ? 'bg-indigo-600 text-white shadow-md font-bold'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200'
-                    }`}
+              <button
+                onClick={() => setIsCreatingConfig(true)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 shadow-lg transition-all"
+              >
+                <Plus className="w-4 h-4" /> Crear Primer Archivo de Configuración
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Sidebar list of configs */}
+              <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase">Archivos ({configsList.length})</h4>
+                </div>
+                <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
+                  {configsList.map((cfg, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between p-2 rounded-xl text-xs font-mono transition-all group ${
+                        activeConfigIndex === idx
+                          ? 'bg-indigo-600 text-white shadow-md font-bold'
+                          : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <button
+                        onClick={() => setActiveConfigIndex(idx)}
+                        className="flex-1 text-left truncate pr-2"
+                      >
+                        {cfg.path || cfg.name}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteConfig(cfg, idx)}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Code Editor */}
+              <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <span className="text-xs font-mono font-bold text-indigo-300">
+                    {configsList[activeConfigIndex]?.path || configsList[activeConfigIndex]?.name || 'Editor'}
+                  </span>
+                  <button
+                    onClick={handleSaveCurrentConfig}
+                    disabled={isLoading || !configsList.length}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
                   >
-                    <button
-                      onClick={() => setActiveConfigIndex(idx)}
-                      className="flex-1 text-left truncate pr-2"
-                    >
-                      {cfg.path || cfg.name}
-                    </button>
-                    <button
-                      onClick={() => handleDeleteConfig(cfg, idx)}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                    <Save className="w-3.5 h-3.5" />
+                    {configSavedNotice ? '✅ ¡Guardado y Sincronizado!' : 'Guardar Archivo'}
+                  </button>
+                </div>
+
+                <textarea
+                  value={configDraft}
+                  onChange={(e) => setConfigDraft(e.target.value)}
+                  placeholder="# Escribe aquí la configuración..."
+                  className="w-full flex-1 min-h-[460px] bg-slate-950 border border-slate-800/90 rounded-2xl p-4 font-mono text-xs text-slate-200 outline-none focus:border-indigo-500/60 leading-relaxed shadow-inner"
+                />
               </div>
             </div>
-
-            {/* Code Editor */}
-            <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <span className="text-xs font-mono font-bold text-indigo-300">
-                  {configsList[activeConfigIndex]?.path || configsList[activeConfigIndex]?.name || 'Editor'}
-                </span>
-                <button
-                  onClick={handleSaveCurrentConfig}
-                  disabled={isLoading || !configsList.length}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {configSavedNotice ? '✅ ¡Guardado y Sincronizado!' : 'Guardar Archivo'}
-                </button>
-              </div>
-
-              <textarea
-                value={configDraft}
-                onChange={(e) => setConfigDraft(e.target.value)}
-                placeholder="# Escribe aquí la configuración..."
-                className="w-full flex-1 min-h-[460px] bg-slate-950 border border-slate-800/90 rounded-2xl p-4 font-mono text-xs text-slate-200 outline-none focus:border-indigo-500/60 leading-relaxed shadow-inner"
-              />
-            </div>
-          </div>
+          )}
         </div>
       )}
 
