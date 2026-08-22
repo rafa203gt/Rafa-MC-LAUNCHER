@@ -185,8 +185,8 @@ export class Cosmetics3DRenderer {
     // Posicionada en el omóplato izquierdo: X=2.0 (hacia la izquierda del cuerpo), Z=0.5 (ligeramente más atrás)
     leftShoulder.position.set(2.0, 0, 0.5);
 
-    // 1. Hueso del brazo superior (Húmero) - se extiende hacia afuera (X) y hacia atrás (Z)
-    const armGeo = new THREE.CylinderGeometry(0.22, 0.34, 3.5, 6);
+    // 1. Hueso del brazo superior (Húmero) - Estilo Minecraft Blocky (BoxGeometry)
+    const armGeo = new THREE.BoxGeometry(0.8, 4.0, 0.8);
     const armMesh = new THREE.Mesh(armGeo, boneMat);
     armMesh.position.set(1.2, 0.8, 0.8);
     armMesh.rotation.z = -Math.PI / 4.5; // Inclinado hacia afuera
@@ -197,18 +197,18 @@ export class Cosmetics3DRenderer {
     const leftElbow = new THREE.Group();
     leftElbow.position.set(2.5, 1.5, 1.5);
 
-    // Garra / Espolón superior
-    const clawGeo = new THREE.ConeGeometry(0.26, 1.2, 5);
+    // Garra / Espolón superior (Blocky)
+    const clawGeo = new THREE.BoxGeometry(0.5, 1.8, 0.5);
     const clawMesh = new THREE.Mesh(clawGeo, clawMat);
     clawMesh.position.set(0.3, 0.8, 0);
     clawMesh.rotation.z = 0.3;
     clawMesh.rotation.x = -0.2;
     leftElbow.add(clawMesh);
 
-    // 3. Costillas radiales de dragón en abanico - extendiéndose hacia afuera y atrás
-
+    // 3. Costillas radiales de dragón en abanico (Blocky)
+    
     // Costilla 1 (Superior/Larga - Cresta del ala)
-    const rib1Geo = new THREE.CylinderGeometry(0.12, 0.18, 5.0, 5);
+    const rib1Geo = new THREE.BoxGeometry(0.4, 5.5, 0.4);
     const rib1 = new THREE.Mesh(rib1Geo, ribMat);
     rib1.position.set(1.5, 1.8, 1.0);
     rib1.rotation.z = -Math.PI / 4;
@@ -216,7 +216,7 @@ export class Cosmetics3DRenderer {
     leftElbow.add(rib1);
 
     // Costilla 2 (Central)
-    const rib2Geo = new THREE.CylinderGeometry(0.10, 0.16, 4.6, 5);
+    const rib2Geo = new THREE.BoxGeometry(0.3, 5.0, 0.3);
     const rib2 = new THREE.Mesh(rib2Geo, ribMat);
     rib2.position.set(2.0, 0.0, 1.5);
     rib2.rotation.z = -Math.PI / 3;
@@ -224,7 +224,7 @@ export class Cosmetics3DRenderer {
     leftElbow.add(rib2);
 
     // Costilla 3 (Inferior)
-    const rib3Geo = new THREE.CylinderGeometry(0.09, 0.14, 3.8, 5);
+    const rib3Geo = new THREE.BoxGeometry(0.3, 4.2, 0.3);
     const rib3 = new THREE.Mesh(rib3Geo, ribMat);
     rib3.position.set(1.5, -1.2, 1.8);
     rib3.rotation.z = -Math.PI / 2.2;
