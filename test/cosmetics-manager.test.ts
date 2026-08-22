@@ -36,8 +36,8 @@ describe('CosmeticsManager & Economy Unit Tests', () => {
     expect(equipped.username).toBe(testUser);
 
     // Equipar capa
-    const updated = await cosmeticsMgr.equipCosmetic(testUser, 'cape', 'cape-mojang-anniversary');
-    expect(updated.cape_id).toBe('cape-mojang-anniversary');
+    const updated = await cosmeticsMgr.equipCosmetic(testUser, 'cape', 'cape-rafa-champions');
+    expect(updated.cape_id).toBe('cape-rafa-champions');
 
     // Desequipar capa
     const unequipped = await cosmeticsMgr.equipCosmetic(testUser, 'cape', null);

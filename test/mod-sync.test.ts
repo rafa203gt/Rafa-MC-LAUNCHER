@@ -27,5 +27,5 @@ describe('ModSynchronizer Unit Tests', () => {
     const manifest = await sync.fetchManifest('https://invalid-host-unreachable-999.com/manifest.json');
     // Debe recuperarse mediante overlay o retornar null sin lanzar error fatal
     expect(manifest === null || typeof manifest === 'object').toBe(true);
-  });
+  }, 10000);
 });

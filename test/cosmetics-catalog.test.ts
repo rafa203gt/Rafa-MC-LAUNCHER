@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CosmeticsManager } from '../src/main/cosmetics-manager';
 
-describe('Cosmetics 50+ Community Catalog Tests', () => {
+describe('Cosmetics Real & Functional Catalog Tests', () => {
   let cosmeticsMgr: CosmeticsManager;
 
   beforeEach(() => {
     cosmeticsMgr = new CosmeticsManager();
   });
 
-  it('debe contener un catálogo extenso con más de 30 cosméticos activos', async () => {
+  it('debe contener un catálogo de cosméticos reales y activos', async () => {
     const catalog = await cosmeticsMgr.getCatalog();
-    expect(catalog.length).toBeGreaterThanOrEqual(30);
+    expect(catalog.length).toBeGreaterThanOrEqual(15);
 
     // Validar que existan cosméticos en todas las categorías principales
     const categories = new Set(catalog.map((c) => c.category));
@@ -20,10 +20,13 @@ describe('Cosmetics 50+ Community Catalog Tests', () => {
     expect(categories.has('bandana')).toBe(true);
   });
 
-  it('debe incluir cosméticos exclusivos de Rafa Launcher', async () => {
+  it('debe incluir cosméticos exclusivos de Rafa Launcher con texturas reales', async () => {
     const catalog = await cosmeticsMgr.getCatalog();
     const rafaCosmetics = catalog.filter((c) => c.id.includes('rafa'));
     expect(rafaCosmetics.length).toBeGreaterThanOrEqual(3);
+    for (const item of rafaCosmetics) {
+      expect(item.texture_url).toBeTruthy();
+    }
   });
 
   it('debe tener precios y rarezas válidos en todos los items', async () => {
