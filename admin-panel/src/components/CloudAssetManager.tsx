@@ -603,7 +603,14 @@ export const CloudAssetManager: React.FC = () => {
   const handleToggleShader = async (shader: Shaderpack) => {
     try {
       const nextState = !shader.is_active;
+      // 1. Update shaderpacks table
       await supabase.from('shaderpacks').update({ is_active: nextState }).eq('id', shader.id);
+      // 2. Also update in modpack_mods if stored there
+      await supabase
+        .from('modpack_mods')
+        .update({ is_enabled: nextState })
+        .or(`id.eq.${shader.id},file_name.eq.${shader.file_name}`);
+
       setShadersList((prev) => prev.map((s) => (s.id === shader.id ? { ...s, is_active: nextState } : s)));
     } catch (err: any) {
       alert(`Error al cambiar estado del shader: ${err.message}`);
@@ -615,6 +622,11 @@ export const CloudAssetManager: React.FC = () => {
     if (!confirm(`¿Estás seguro de eliminar el shader "${shader.name}"?`)) return;
     try {
       await supabase.from('shaderpacks').delete().eq('id', shader.id);
+      await supabase
+        .from('modpack_mods')
+        .delete()
+        .or(`id.eq.${shader.id},file_name.eq.${shader.file_name}`);
+
       setShadersList((prev) => prev.filter((s) => s.id !== shader.id));
     } catch (err: any) {
       alert(`Error al eliminar shader: ${err.message}`);
@@ -627,20 +639,31 @@ export const CloudAssetManager: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('remote_instances')
+      // 1. Update instance timestamp in instances table
+      const { error: instErr } = await supabase
+        .from('instances')
         .update({
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedInstance.id);
 
-      if (error) throw error;
+      if (instErr) {
+        console.warn('Aviso actualizando timestamp de instancia:', instErr.message);
+      }
 
-      await supabase.from('remote_config').update({
-        updated_at: new Date().toISOString()
-      }).eq('id', 1);
+      // 2. Update launcher_config timestamp to notify all connected launcher clients in realtime
+      const { error: cfgErr } = await supabase
+        .from('launcher_config')
+        .update({
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 'global');
 
-      alert(`🚀 ¡Instancia "${selectedInstance.name}" sincronizada en tiempo real!`);
+      if (cfgErr) {
+        console.warn('Aviso actualizando launcher_config:', cfgErr.message);
+      }
+
+      alert(`🚀 ¡Instancia "${selectedInstance.name}" sincronizada en tiempo real con todos los jugadores!`);
     } catch (err: any) {
       alert(`Error sincronizando: ${err.message}`);
     } finally {

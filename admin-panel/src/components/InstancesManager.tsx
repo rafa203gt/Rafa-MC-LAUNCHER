@@ -87,7 +87,7 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
       await executeDbQuery((tbl) => supabase.from(tbl).update({ is_default: true, is_active: true, updated_at: new Date().toISOString() }).eq('id', inst.id));
       
       // 3. Notify realtime
-      await supabase.from('remote_config').update({ updated_at: new Date().toISOString() }).eq('id', 1);
+      await supabase.from('launcher_config').update({ updated_at: new Date().toISOString() }).eq('id', 'global');
 
       setToast(`⭐ "${inst.name}" establecida como Instancia Principal`);
       setTimeout(() => setToast(null), 3000);
