@@ -252,17 +252,30 @@ export class RemoteConfigManager {
   public async fetchRemoteMods(instanceId: string = 'atm10'): Promise<any[]> {
     if (!this.supabase) return [];
     try {
-      const { data, error } = await this.supabase
-        .from('modpack_mods')
-        .select('*')
-        .eq('instance_id', instanceId)
-        .eq('is_enabled', true);
+      const PAGE_SIZE = 1000;
+      let allMods: any[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) {
-        console.warn(`[RemoteConfig] Error obteniendo mods remotos para ${instanceId}: ${error.message}`);
-        return [];
+      while (hasMore) {
+        const { data, error } = await this.supabase
+          .from('modpack_mods')
+          .select('*')
+          .eq('instance_id', instanceId)
+          .eq('is_enabled', true)
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error || !data || data.length === 0) {
+          break;
+        }
+        allMods = allMods.concat(data);
+        if (data.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          from += PAGE_SIZE;
+        }
       }
-      return data || [];
+      return allMods;
     } catch {
       return [];
     }

@@ -5,6 +5,38 @@ export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+export async function fetchAllRows<T = any>(
+  tableName: string,
+  filterBuilder?: (query: any) => any,
+  orderBy: string = 'file_name'
+): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  let allRows: T[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase.from(tableName).select('*').range(from, from + PAGE_SIZE - 1);
+    if (orderBy) {
+      query = query.order(orderBy, { ascending: true });
+    }
+    if (filterBuilder) {
+      query = filterBuilder(query);
+    }
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      break;
+    }
+    allRows = allRows.concat(data as T[]);
+    if (data.length < PAGE_SIZE) {
+      hasMore = false;
+    } else {
+      from += PAGE_SIZE;
+    }
+  }
+  return allRows;
+}
+
 export interface LauncherConfig {
   id: string;
   server_name: string;

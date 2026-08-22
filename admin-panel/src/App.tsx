@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import {
   supabase,
+  fetchAllRows,
   LauncherConfig,
   NewsAnnouncement,
   ModpackMod,
@@ -145,7 +146,7 @@ export const App: React.FC = () => {
         { data: instData },
         { data: usersData },
         { data: newsData },
-        { data: modsData },
+        modsData,
         { data: shadersData },
         { data: crashData }
       ] = await Promise.all([
@@ -153,7 +154,7 @@ export const App: React.FC = () => {
         supabase.from('instances').select('*').order('created_at', { ascending: true }),
         supabase.from('launcher_users').select('*').order('last_seen', { ascending: false }),
         supabase.from('launcher_news').select('*').order('created_at', { ascending: false }),
-        supabase.from('modpack_mods').select('*').order('file_name', { ascending: true }),
+        fetchAllRows<ModpackMod>('modpack_mods', undefined, 'file_name'),
         supabase.from('shaderpacks').select('*').order('name', { ascending: true }),
         supabase.from('crash_reports').select('*').order('created_at', { ascending: false })
       ]);

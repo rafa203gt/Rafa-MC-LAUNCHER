@@ -39,7 +39,7 @@ import {
   HardDrive
 } from 'lucide-react';
 import { gitHubStorage, GitHubAsset } from '../github-storage';
-import { supabase, RemoteInstance, ModpackMod, Shaderpack } from '../supabase';
+import { supabase, fetchAllRows, RemoteInstance, ModpackMod, Shaderpack } from '../supabase';
 
 export const detectFileCategory = (
   filePath: string,
@@ -230,15 +230,15 @@ export const CloudAssetManager: React.FC = () => {
   const loadInstanceData = async (instanceId: string) => {
     setIsLoading(true);
     try {
-      // 1. Fetch all items from modpack_mods for this specific instance
-      const { data: modsData, error: modsError } = await supabase
-        .from('modpack_mods')
-        .select('*')
-        .eq('instance_id', instanceId)
-        .order('mod_name', { ascending: true });
+      // 1. Fetch all items from modpack_mods for this specific instance (auto-paginated beyond 1000 rows)
+      const modsData = await fetchAllRows<ModpackMod>(
+        'modpack_mods',
+        (q) => q.eq('instance_id', instanceId),
+        'file_name'
+      );
 
-      if (!modsError && modsData) {
-        setAllFiles(modsData as ModpackMod[]);
+      if (modsData) {
+        setAllFiles(modsData);
 
         // Mods tab: only actual mods (.jar or category === 'mod'/'mods')
         const modsOnly = modsData.filter(
