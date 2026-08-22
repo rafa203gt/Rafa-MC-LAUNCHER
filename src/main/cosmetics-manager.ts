@@ -21,11 +21,12 @@ export interface ShopCosmetic {
 
 export interface UserEquippedCosmetics {
   username: string;
+  client_id?: string;
   uuid?: string;
-  cape_id?: string | null;
-  wings_id?: string | null;
-  hat_id?: string | null;
-  bandana_id?: string | null;
+  cape_id: string | null;
+  wings_id: string | null;
+  hat_id: string | null;
+  bandana_id: string | null;
   updated_at?: string;
   // Resolved cosmetic objects
   cape?: ShopCosmetic | null;
@@ -36,6 +37,7 @@ export interface UserEquippedCosmetics {
 
 export interface UserEconomy {
   username: string;
+  client_id?: string;
   coins: number;
   playtime_minutes: number;
   last_daily_reward: string;
@@ -82,18 +84,24 @@ export class CosmeticsManager {
   }
 
   /**
-   * Obtiene el inventario de cosméticos adquiridos por el usuario.
+   * Obtiene el inventario de cosméticos adquiridos por el usuario o su equipo.
    */
   public async getUserInventory(username: string): Promise<string[]> {
     const cleanUser = (username || '').trim();
-    if (!cleanUser || !this.SUPABASE_URL) return [];
+    if (!this.SUPABASE_URL) return [];
 
     try {
-      const res = await axios.get(
-        `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory?username=eq.${encodeURIComponent(cleanUser)}&select=cosmetic_id`,
-        { headers: this.headers, timeout: 8000 }
-      );
-      return (res.data || []).map((row: any) => row.cosmetic_id);
+      const { configStore } = await import('./config-store');
+      const clientId = configStore.getClientId();
+
+      const queryUrl = clientId && cleanUser
+        ? `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory?or=(client_id.eq.${encodeURIComponent(clientId)},username.eq.${encodeURIComponent(cleanUser)})&select=cosmetic_id`
+        : clientId
+        ? `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory?client_id=eq.${encodeURIComponent(clientId)}&select=cosmetic_id`
+        : `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory?username=eq.${encodeURIComponent(cleanUser)}&select=cosmetic_id`;
+
+      const res = await axios.get(queryUrl, { headers: this.headers, timeout: 8000 });
+      return Array.from(new Set((res.data || []).map((row: any) => row.cosmetic_id)));
     } catch (err: any) {
       console.warn('[CosmeticsManager] Error cargando inventario del usuario:', err.message);
       return [];
@@ -101,7 +109,7 @@ export class CosmeticsManager {
   }
 
   /**
-   * Obtiene los cosméticos actualmente equipados por el usuario.
+   * Obtiene los cosméticos actualmente equipados por el equipo o usuario.
    */
   public async getUserEquipped(username: string): Promise<UserEquippedCosmetics> {
     const cleanUser = (username || '').trim();
@@ -113,21 +121,58 @@ export class CosmeticsManager {
       bandana_id: null
     };
 
-    if (!cleanUser || !this.SUPABASE_URL) return fallback;
+    if (!this.SUPABASE_URL) return fallback;
 
     try {
-      const res = await axios.get(
-        `${this.SUPABASE_URL}/rest/v1/user_equipped_cosmetics?username=eq.${encodeURIComponent(cleanUser)}`,
-        { headers: this.headers, timeout: 8000 }
-      );
+      const { configStore } = await import('./config-store');
+      const clientId = configStore.getClientId();
 
-      if (res.data && res.data.length > 0) {
-        const row = res.data[0];
+      let row: any = null;
+
+      // 1. Prioridad: Buscar por ID único del equipo (client_id)
+      if (clientId) {
+        const clientRes = await axios.get(
+          `${this.SUPABASE_URL}/rest/v1/user_equipped_cosmetics?client_id=eq.${encodeURIComponent(clientId)}`,
+          { headers: this.headers, timeout: 8000 }
+        );
+        if (clientRes.data && clientRes.data.length > 0) {
+          row = clientRes.data[0];
+          // Actualizar nombre si cambió
+          if (cleanUser && row.username !== cleanUser) {
+            axios.patch(
+              `${this.SUPABASE_URL}/rest/v1/user_equipped_cosmetics?client_id=eq.${encodeURIComponent(clientId)}`,
+              { username: cleanUser, updated_at: new Date().toISOString() },
+              { headers: this.headers, timeout: 5000 }
+            ).catch(() => {});
+          }
+        }
+      }
+
+      // 2. Si no existe por client_id, buscar por username
+      if (!row && cleanUser) {
+        const userRes = await axios.get(
+          `${this.SUPABASE_URL}/rest/v1/user_equipped_cosmetics?username=eq.${encodeURIComponent(cleanUser)}`,
+          { headers: this.headers, timeout: 8000 }
+        );
+        if (userRes.data && userRes.data.length > 0) {
+          row = userRes.data[0];
+          if (clientId && !row.client_id) {
+            axios.patch(
+              `${this.SUPABASE_URL}/rest/v1/user_equipped_cosmetics?username=eq.${encodeURIComponent(cleanUser)}`,
+              { client_id: clientId },
+              { headers: this.headers, timeout: 5000 }
+            ).catch(() => {});
+          }
+        }
+      }
+
+      if (row) {
         const catalog = await this.getCatalog();
         const catalogMap = new Map(catalog.map((c) => [c.id, c]));
 
         return {
-          username: row.username,
+          username: cleanUser || row.username,
+          client_id: row.client_id || clientId,
           uuid: row.uuid,
           cape_id: row.cape_id,
           wings_id: row.wings_id,
@@ -140,6 +185,7 @@ export class CosmeticsManager {
           bandana: row.bandana_id ? catalogMap.get(row.bandana_id) || null : null
         };
       }
+
       return fallback;
     } catch (err: any) {
       console.warn('[CosmeticsManager] Error cargando cosméticos equipados:', err.message);
@@ -163,8 +209,12 @@ export class CosmeticsManager {
     const current = await this.getUserEquipped(cleanUser);
     const slotKey = `${slot}_id` as 'cape_id' | 'wings_id' | 'hat_id' | 'bandana_id';
 
+    const { configStore } = await import('./config-store');
+    const clientId = configStore.getClientId();
+
     const payload = {
       username: cleanUser,
+      client_id: clientId,
       uuid: uuid || current.uuid || '',
       cape_id: slot === 'cape' ? cosmeticId : current.cape_id,
       wings_id: slot === 'wings' ? cosmeticId : current.wings_id,
@@ -207,39 +257,80 @@ export class CosmeticsManager {
   }
 
   /**
-   * Obtiene la economía y saldo de Rafa Coins del usuario.
+   * Obtiene la economía y saldo de Rafa Coins anclado al equipo o usuario.
    */
   public async getUserEconomy(username: string): Promise<UserEconomy> {
     const cleanUser = (username || '').trim();
+    let clientId = '';
+    try {
+      const { configStore } = await import('./config-store');
+      clientId = configStore.getClientId();
+    } catch {}
+
     const fallback: UserEconomy = this.localEconomy.get(cleanUser) || {
       username: cleanUser,
+      client_id: clientId,
       coins: 500, // Bono inicial de bienvenida
       playtime_minutes: 0,
       last_daily_reward: ''
     };
 
-    if (!cleanUser) return fallback;
-
     if (this.SUPABASE_URL && this.SUPABASE_KEY) {
       try {
-        const res = await axios.get(
-          `${this.SUPABASE_URL}/rest/v1/user_economy?username=eq.${encodeURIComponent(cleanUser)}`,
-          { headers: this.headers, timeout: 8000 }
-        );
+        let remote: any = null;
 
-        if (res.data && res.data.length > 0) {
-          const remote = res.data[0];
+        // 1. Prioridad: Buscar por ID único del equipo (client_id)
+        if (clientId) {
+          const clientRes = await axios.get(
+            `${this.SUPABASE_URL}/rest/v1/user_economy?client_id=eq.${encodeURIComponent(clientId)}`,
+            { headers: this.headers, timeout: 8000 }
+          );
+          if (clientRes.data && clientRes.data.length > 0) {
+            remote = clientRes.data[0];
+            // Si el nombre de usuario cambió en este equipo, sincronizar el nuevo nombre manteniendo todas las monedas
+            if (cleanUser && remote.username !== cleanUser) {
+              remote.username = cleanUser;
+              axios.patch(
+                `${this.SUPABASE_URL}/rest/v1/user_economy?client_id=eq.${encodeURIComponent(clientId)}`,
+                { username: cleanUser, updated_at: new Date().toISOString() },
+                { headers: this.headers, timeout: 5000 }
+              ).catch(() => {});
+            }
+          }
+        }
+
+        // 2. Si no existe por client_id, buscar por username
+        if (!remote && cleanUser) {
+          const userRes = await axios.get(
+            `${this.SUPABASE_URL}/rest/v1/user_economy?username=eq.${encodeURIComponent(cleanUser)}`,
+            { headers: this.headers, timeout: 8000 }
+          );
+          if (userRes.data && userRes.data.length > 0) {
+            remote = userRes.data[0];
+            if (clientId && !remote.client_id) {
+              remote.client_id = clientId;
+              axios.patch(
+                `${this.SUPABASE_URL}/rest/v1/user_economy?username=eq.${encodeURIComponent(cleanUser)}`,
+                { client_id: clientId },
+                { headers: this.headers, timeout: 5000 }
+              ).catch(() => {});
+            }
+          }
+        }
+
+        if (remote) {
           this.localEconomy.set(cleanUser, remote);
           return remote;
         }
 
         // Crear registro inicial si no existe
-        await axios.post(`${this.SUPABASE_URL}/rest/v1/user_economy`, fallback, {
+        const newRecord = { ...fallback, username: cleanUser || 'Player', client_id: clientId };
+        await axios.post(`${this.SUPABASE_URL}/rest/v1/user_economy`, newRecord, {
           headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' },
           timeout: 8000
         });
-        this.localEconomy.set(cleanUser, fallback);
-        return fallback;
+        this.localEconomy.set(cleanUser, newRecord);
+        return newRecord;
       } catch (err: any) {
         console.warn('[CosmeticsManager] Error obteniendo economía remota de usuario:', err.message);
       }
@@ -253,7 +344,8 @@ export class CosmeticsManager {
    */
   public async buyCosmetic(username: string, cosmeticId: string): Promise<{ success: boolean; message: string; remainingCoins: number }> {
     const cleanUser = (username || '').trim();
-    if (!cleanUser) throw new Error('Nombre de usuario requerido');
+    const { configStore } = await import('./config-store');
+    const clientId = configStore.getClientId();
 
     // 1. Obtener detalles del cosmético
     const catalog = await this.getCatalog();
@@ -274,7 +366,13 @@ export class CosmeticsManager {
 
     // 4. Deducir monedas
     const remainingCoins = economy.coins - item.price;
-    const updatedEconomy = { ...economy, coins: remainingCoins, updated_at: new Date().toISOString() };
+    const updatedEconomy: UserEconomy = {
+      ...economy,
+      username: cleanUser || economy.username,
+      client_id: clientId,
+      coins: remainingCoins,
+      updated_at: new Date().toISOString()
+    };
     this.localEconomy.set(cleanUser, updatedEconomy);
 
     if (this.SUPABASE_URL && this.SUPABASE_KEY) {
@@ -289,7 +387,8 @@ export class CosmeticsManager {
         await axios.post(
           `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory`,
           {
-            username: cleanUser,
+            username: cleanUser || economy.username,
+            client_id: clientId,
             cosmetic_id: cosmeticId,
             acquired_at: new Date().toISOString()
           },

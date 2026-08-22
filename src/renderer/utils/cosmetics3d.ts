@@ -117,18 +117,18 @@ export class Cosmetics3DRenderer {
   }
 
   /**
-   * Construye una membrana festoneada de dragón con curvas de Bézier idénticas a Lunar Client
+   * Construye una membrana festoneada de dragón con curvas de Bézier idénticas a Lunar Client (elevadas y majestuosas)
    */
   private createDragonWingMembrane(isLeft: boolean, color: number): THREE.Mesh {
     const shape = new THREE.Shape();
     const sign = isLeft ? 1 : -1;
 
-    // Membrana festoneada estilizada de dragón con arcos cóncavos profundos
+    // Membrana festoneada estilizada de dragón con cresta alta y arcos cóncavos
     shape.moveTo(0, 0); // Codo
-    shape.lineTo(sign * 4.8, 0.4); // Punta costilla superior (alta y ancha)
-    shape.quadraticCurveTo(sign * 4.4, -1.3, sign * 3.7, -2.7); // Arco festoneado 1
-    shape.quadraticCurveTo(sign * 2.7, -3.3, sign * 1.6, -3.7); // Arco festoneado 2
-    shape.quadraticCurveTo(sign * 0.7, -2.2, 0, 0); // Arco festoneado 3 hacia la base
+    shape.lineTo(sign * 5.0, 2.0); // Punta cresta superior alta (se eleva por encima del hombro)
+    shape.quadraticCurveTo(sign * 4.6, 0.2, sign * 4.4, -1.8); // Arco festoneado 1
+    shape.quadraticCurveTo(sign * 3.3, -2.4, sign * 2.2, -3.8); // Arco festoneado 2
+    shape.quadraticCurveTo(sign * 0.8, -2.2, 0, 0); // Arco festoneado hacia la base
 
     const geo = new THREE.ShapeGeometry(shape);
     const mat = new THREE.MeshBasicMaterial({
@@ -143,8 +143,8 @@ export class Cosmetics3DRenderer {
 
   private attachWings(body: THREE.Object3D, cosmetic: ShopCosmetic) {
     const wingsGroup = new THREE.Group();
-    // Posición perfecta sobre los omóplatos en la espalda superior (Z=2.15 evita clipping)
-    wingsGroup.position.set(0, 2.5, 2.15);
+    // Posición alta y perfecta sobre los omóplatos en la espalda superior (Y=4.6, Z=2.15)
+    wingsGroup.position.set(0, 4.6, 2.15);
 
     const isBlackDragon =
       cosmetic.id === 'wings-fallen-angel-void' ||
@@ -163,26 +163,26 @@ export class Cosmetics3DRenderer {
 
     // === ALA IZQUIERDA ===
     const leftShoulder = new THREE.Group();
-    leftShoulder.position.set(2.2, 0, 0); // Omóplato izquierdo
+    leftShoulder.position.set(1.8, 0, 0); // Omóplato izquierdo
 
     // 1. Hueso del brazo superior (Húmero de dragón hacia arriba y afuera)
-    const armGeo = new THREE.CylinderGeometry(0.24, 0.36, 4.2, 6);
+    const armGeo = new THREE.CylinderGeometry(0.24, 0.36, 4.0, 6);
     const boneMat = new THREE.MeshBasicMaterial({ color: boneColor });
     const armMesh = new THREE.Mesh(armGeo, boneMat);
-    armMesh.position.set(1.5, 1.4, -0.2);
-    armMesh.rotation.z = -Math.PI / 4.2;
+    armMesh.position.set(1.4, 1.4, -0.2);
+    armMesh.rotation.z = -Math.PI / 4.0;
     armMesh.rotation.x = -0.1;
     leftShoulder.add(armMesh);
 
-    // 2. Articulación del codo (Elbow Group)
+    // 2. Articulación del codo (Elbow Group situado bien arriba y afuera)
     const leftElbow = new THREE.Group();
-    leftElbow.position.set(3.1, 2.8, -0.4);
+    leftElbow.position.set(2.8, 2.8, -0.4);
 
     // Garra / Espolón superior característico de dragón estilo Lunar
-    const clawGeo = new THREE.ConeGeometry(0.26, 1.2, 5);
+    const clawGeo = new THREE.ConeGeometry(0.28, 1.3, 5);
     const clawMat = new THREE.MeshBasicMaterial({ color: clawColor });
     const clawMesh = new THREE.Mesh(clawGeo, clawMat);
-    clawMesh.position.set(0, 0.5, 0.1);
+    clawMesh.position.set(0, 0.6, 0.1);
     clawMesh.rotation.z = 0.25;
     clawMesh.rotation.x = -0.3;
     leftElbow.add(clawMesh);
@@ -190,25 +190,25 @@ export class Cosmetics3DRenderer {
     // 3. Costillas / Huesos radiales de dragón en abanico
     const ribMat = new THREE.MeshBasicMaterial({ color: boneColor });
 
-    // Costilla 1 (Superior/Larga - Cresta del ala)
-    const rib1Geo = new THREE.CylinderGeometry(0.12, 0.2, 5.0, 5);
+    // Costilla 1 (Superior/Larga - Cresta alta del ala)
+    const rib1Geo = new THREE.CylinderGeometry(0.12, 0.2, 5.2, 5);
     const rib1 = new THREE.Mesh(rib1Geo, ribMat);
-    rib1.position.set(2.4, 0.2, 0);
-    rib1.rotation.z = -Math.PI / 2.3;
+    rib1.position.set(2.5, 1.1, 0);
+    rib1.rotation.z = -Math.PI / 3.8;
     leftElbow.add(rib1);
 
     // Costilla 2 (Central)
-    const rib2Geo = new THREE.CylinderGeometry(0.11, 0.18, 4.6, 5);
+    const rib2Geo = new THREE.CylinderGeometry(0.11, 0.18, 4.8, 5);
     const rib2 = new THREE.Mesh(rib2Geo, ribMat);
-    rib2.position.set(1.8, -1.3, 0);
-    rib2.rotation.z = -0.65;
+    rib2.position.set(2.2, -0.8, 0);
+    rib2.rotation.z = -Math.PI / 2.2;
     leftElbow.add(rib2);
 
     // Costilla 3 (Inferior)
-    const rib3Geo = new THREE.CylinderGeometry(0.1, 0.16, 3.8, 5);
+    const rib3Geo = new THREE.CylinderGeometry(0.1, 0.16, 4.0, 5);
     const rib3 = new THREE.Mesh(rib3Geo, ribMat);
-    rib3.position.set(0.8, -1.8, 0);
-    rib3.rotation.z = -0.25;
+    rib3.position.set(1.1, -1.8, 0);
+    rib3.rotation.z = -Math.PI / 1.6;
     leftElbow.add(rib3);
 
     // 4. Membrana curvada festoneada
@@ -219,36 +219,36 @@ export class Cosmetics3DRenderer {
 
     // === ALA DERECHA (Simétrica) ===
     const rightShoulder = new THREE.Group();
-    rightShoulder.position.set(-2.2, 0, 0); // Omóplato derecho
+    rightShoulder.position.set(-1.8, 0, 0); // Omóplato derecho
 
     const armMeshR = new THREE.Mesh(armGeo, boneMat);
-    armMeshR.position.set(-1.5, 1.4, -0.2);
-    armMeshR.rotation.z = Math.PI / 4.2;
+    armMeshR.position.set(-1.4, 1.4, -0.2);
+    armMeshR.rotation.z = Math.PI / 4.0;
     armMeshR.rotation.x = -0.1;
     rightShoulder.add(armMeshR);
 
     const rightElbow = new THREE.Group();
-    rightElbow.position.set(-3.1, 2.8, -0.4);
+    rightElbow.position.set(-2.8, 2.8, -0.4);
 
     const clawMeshR = new THREE.Mesh(clawGeo, clawMat);
-    clawMeshR.position.set(0, 0.5, 0.1);
+    clawMeshR.position.set(0, 0.6, 0.1);
     clawMeshR.rotation.z = -0.25;
     clawMeshR.rotation.x = -0.3;
     rightElbow.add(clawMeshR);
 
     const rib1R = new THREE.Mesh(rib1Geo, ribMat);
-    rib1R.position.set(-2.4, 0.2, 0);
-    rib1R.rotation.z = Math.PI / 2.3;
+    rib1R.position.set(-2.5, 1.1, 0);
+    rib1R.rotation.z = Math.PI / 3.8;
     rightElbow.add(rib1R);
 
     const rib2R = new THREE.Mesh(rib2Geo, ribMat);
-    rib2R.position.set(-1.8, -1.3, 0);
-    rib2R.rotation.z = 0.65;
+    rib2R.position.set(-2.2, -0.8, 0);
+    rib2R.rotation.z = Math.PI / 2.2;
     rightElbow.add(rib2R);
 
     const rib3R = new THREE.Mesh(rib3Geo, ribMat);
-    rib3R.position.set(-0.8, -1.8, 0);
-    rib3R.rotation.z = 0.25;
+    rib3R.position.set(-1.1, -1.8, 0);
+    rib3R.rotation.z = Math.PI / 1.6;
     rightElbow.add(rib3R);
 
     const membraneRight = this.createDragonWingMembrane(false, membraneColor);
