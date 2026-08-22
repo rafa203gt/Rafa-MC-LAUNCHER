@@ -29,7 +29,7 @@ export const App: React.FC = () => {
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
-  const [appVersion, setAppVersion] = useState('1.0.25');
+  const [appVersion, setAppVersion] = useState('1.0.26');
   const [isShadersOpen, setIsShadersOpen] = useState(false);
   const [crashDiagnosis, setCrashDiagnosis] = useState<CrashDiagnosis | null>(null);
   const [isCrashModalOpen, setIsCrashModalOpen] = useState(false);

@@ -228,7 +228,7 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
           launcherVersion: app.getVersion(),
           ramAllocated: options.maxRam || settings.maxRam,
           errorMessage: `[${diagnosis.type}] ${diagnosis.title}: ${diagnosis.description}`,
-          crashLog: diagnosis.rawSnippet || diagnosis.solution || ''
+          crashLog: diagnosis.rawLogSnippet || diagnosis.description || ''
         });
 
         if (mainWindow) {
