@@ -78,8 +78,12 @@ export const CloudAssetManager: React.FC = () => {
   // Load instances from Supabase
   const loadInstances = async () => {
     try {
-      const { data, error } = await supabase.from('remote_instances').select('*').order('created_at', { ascending: true });
-      if (error) throw error;
+      let { data, error } = await supabase.from('instances').select('*').order('created_at', { ascending: true });
+      if (error || !data || data.length === 0) {
+        const alt = await supabase.from('remote_instances').select('*').order('created_at', { ascending: true });
+        if (!alt.error && alt.data) data = alt.data;
+      }
+
       if (data && data.length > 0) {
         setInstances(data);
         const current = data.find((inst) => inst.id === selectedInstanceId) || data[0];
@@ -140,22 +144,24 @@ export const CloudAssetManager: React.FC = () => {
     if (!selectedInstance) return;
     try {
       setIsLoading(true);
-      const { error } = await supabase
-        .from('remote_instances')
-        .update({
-          name: instanceParamsDraft.name,
-          description: instanceParamsDraft.description,
-          minecraft_version: instanceParamsDraft.minecraft_version,
-          mod_loader: instanceParamsDraft.mod_loader,
-          mod_loader_version: instanceParamsDraft.mod_loader_version,
-          custom_ram: Number(instanceParamsDraft.custom_ram) || 8192,
-          server_ip: instanceParamsDraft.server_ip,
-          server_port: Number(instanceParamsDraft.server_port) || 25565,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedInstance.id);
+      const payload = {
+        name: instanceParamsDraft.name,
+        description: instanceParamsDraft.description,
+        minecraft_version: instanceParamsDraft.minecraft_version,
+        mod_loader: instanceParamsDraft.mod_loader,
+        mod_loader_version: instanceParamsDraft.mod_loader_version,
+        custom_ram: Number(instanceParamsDraft.custom_ram) || 8192,
+        server_ip: instanceParamsDraft.server_ip,
+        server_port: Number(instanceParamsDraft.server_port) || 25565,
+        updated_at: new Date().toISOString()
+      };
 
-      if (error) throw error;
+      let { error } = await supabase.from('instances').update(payload).eq('id', selectedInstance.id);
+      if (error) {
+        const alt = await supabase.from('remote_instances').update(payload).eq('id', selectedInstance.id);
+        if (alt.error) throw alt.error;
+      }
+
       alert(`✅ ¡Parámetros de la instancia "${instanceParamsDraft.name}" actualizados con éxito!`);
       setIsEditingParams(false);
       await loadInstances();

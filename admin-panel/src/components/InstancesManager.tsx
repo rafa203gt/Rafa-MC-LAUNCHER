@@ -71,6 +71,44 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
     setIsEditing(true);
   };
 
+  const executeDbQuery = async (action: (tableName: string) => Promise<{ error: any }>) => {
+    let res = await action('instances');
+    if (res.error) {
+      res = await action('remote_instances');
+    }
+    if (res.error) throw res.error;
+  };
+
+  const handleSetDefault = async (inst: RemoteInstance) => {
+    try {
+      // 1. Set all to is_default = false
+      await executeDbQuery((tbl) => supabase.from(tbl).update({ is_default: false }).neq('id', ''));
+      // 2. Set target to is_default = true, is_active = true
+      await executeDbQuery((tbl) => supabase.from(tbl).update({ is_default: true, is_active: true, updated_at: new Date().toISOString() }).eq('id', inst.id));
+      
+      // 3. Notify realtime
+      await supabase.from('remote_config').update({ updated_at: new Date().toISOString() }).eq('id', 1);
+
+      setToast(`⭐ "${inst.name}" establecida como Instancia Principal`);
+      setTimeout(() => setToast(null), 3000);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Error al activar instancia: ${err.message}`);
+    }
+  };
+
+  const handleToggleActive = async (inst: RemoteInstance) => {
+    try {
+      const nextState = !inst.is_active;
+      await executeDbQuery((tbl) => supabase.from(tbl).update({ is_active: nextState, updated_at: new Date().toISOString() }).eq('id', inst.id));
+      setToast(nextState ? `🟢 "${inst.name}" activada` : `⚪ "${inst.name}" desactivada`);
+      setTimeout(() => setToast(null), 3000);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Error cambiando visibilidad: ${err.message}`);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -90,19 +128,19 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
 
       if (selectedInstance) {
         // Update
-        const { error } = await supabase.from('instances').update(payload).eq('id', selectedInstance.id);
-        if (error) throw error;
+        await executeDbQuery((tbl) => supabase.from(tbl).update(payload).eq('id', selectedInstance.id));
         setToast('✅ Instancia actualizada con éxito');
       } else {
         // Insert
         const cleanId = formId.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
-        const { error } = await supabase.from('instances').insert({
-          id: cleanId,
-          ...payload,
-          is_default: false,
-          is_active: true
-        });
-        if (error) throw error;
+        await executeDbQuery((tbl) =>
+          supabase.from(tbl).insert({
+            id: cleanId,
+            ...payload,
+            is_default: false,
+            is_active: true
+          })
+        );
         setToast('✅ Nueva instancia creada con éxito');
       }
 
@@ -122,8 +160,7 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
     if (!confirm(`¿Estás seguro de eliminar la instancia "${inst.name}" y desvincular sus mods?`)) return;
 
     try {
-      const { error } = await supabase.from('instances').delete().eq('id', inst.id);
-      if (error) throw error;
+      await executeDbQuery((tbl) => supabase.from(tbl).delete().eq('id', inst.id));
       onRefresh();
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -148,7 +185,7 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
 
         <div className="flex items-center gap-3">
           {toast && (
-            <div className="flex items-center gap-2 bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-xs px-3.5 py-1.5 rounded-full shadow-lg">
+            <div className="flex items-center gap-2 bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-xs px-3.5 py-1.5 rounded-full shadow-lg animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               {toast}
             </div>
@@ -169,32 +206,45 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
         {instances.map((inst) => (
           <div
             key={inst.id}
-            className="bg-[#0a0d14] border border-admin-border hover:border-slate-700 rounded-2xl p-5 space-y-4 transition-all shadow-lg relative group"
+            className={`border rounded-2xl p-5 space-y-4 transition-all shadow-lg relative group ${
+              inst.is_default
+                ? 'bg-[#0e1424] border-indigo-500/60 shadow-indigo-500/10'
+                : inst.is_active
+                ? 'bg-[#0a0d14] border-admin-border hover:border-slate-700'
+                : 'bg-[#080a0f] border-slate-900 opacity-60'
+            }`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400">
+                <div className={`p-2.5 rounded-xl border ${inst.is_default ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-blue-500/10 border-blue-500/20 text-blue-400'}`}>
                   <Flame className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
-                    {inst.name}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-extrabold text-white">
+                      {inst.name}
+                    </h4>
                     {inst.is_default && (
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.2 rounded-full font-bold">
-                        Por Defecto
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                        ⭐ Principal Activa
                       </span>
                     )}
-                  </h4>
+                    {!inst.is_active && (
+                      <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-bold">
+                        Oculta
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-slate-500 font-mono">ID: {inst.id}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleOpenEdit(inst)}
                   className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
-                  title="Editar Instancia"
+                  title="Editar Parámetros"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -230,6 +280,33 @@ export const InstancesManager: React.FC<InstancesManagerProps> = ({ instances, o
                 <Sparkles className="w-3.5 h-3.5 text-slate-500" />
                 <span>{inst.is_official ? 'Oficial' : 'Comunidad'}</span>
               </div>
+            </div>
+
+            {/* Quick Actions Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-admin-border/40 gap-2">
+              <button
+                type="button"
+                onClick={() => handleToggleActive(inst)}
+                className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition-all ${
+                  inst.is_active
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-400'
+                }`}
+                title="Mostrar u ocultar esta instancia en los launchers"
+              >
+                {inst.is_active ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4" />}
+                {inst.is_active ? 'Visible en Launcher' : 'Oculta'}
+              </button>
+
+              {!inst.is_default && (
+                <button
+                  type="button"
+                  onClick={() => handleSetDefault(inst)}
+                  className="text-[11px] font-bold px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all active:scale-95 shadow-sm flex items-center gap-1"
+                >
+                  ⭐ Hacer Principal
+                </button>
+              )}
             </div>
           </div>
         ))}
