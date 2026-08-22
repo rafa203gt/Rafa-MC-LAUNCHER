@@ -683,8 +683,30 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
                         )}
                       </div>
 
+                      {/* Visual Cosmetic Preview / Photo Banner */}
+                      <div className="w-full h-28 rounded-xl bg-black/50 border border-mc-border/60 p-2.5 flex items-center justify-center relative overflow-hidden mb-3 group-hover:border-amber-500/50 transition-colors">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                        {item.texture_url ? (
+                          <img
+                            src={item.texture_url}
+                            alt={item.name}
+                            className="max-h-20 max-w-full object-contain rounded filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.7)] image-rendering-pixelated group-hover:scale-110 transition-transform duration-300"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://minotar.net/helm/Steve/64.png';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-slate-500">
+                            <ShoppingBag className="w-6 h-6" />
+                          </div>
+                        )}
+                        <span className="absolute bottom-1.5 left-2 text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono bg-black/60 px-1.5 py-0.5 rounded border border-white/10">
+                          {item.category}
+                        </span>
+                      </div>
+
                       {/* Item Details */}
-                      <div className="space-y-1.5 mb-4">
+                      <div className="space-y-1 mb-4 flex-1">
                         <h4 className="text-sm font-black text-white group-hover:text-amber-300 transition-colors">
                           {item.name}
                         </h4>
@@ -704,7 +726,7 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
                             onClick={() => setPreviewCosmetic(isPreviewing ? null : item)}
                             className={`p-2 rounded-xl text-xs font-bold transition-all border ${
                               isPreviewing
-                                ? 'bg-purple-600 text-white border-purple-400'
+                                ? 'bg-purple-600 text-white border-purple-400 shadow-glow'
                                 : 'bg-white/5 hover:bg-white/10 text-slate-300 border-mc-border/60'
                             }`}
                             title="Probar en el modelo 3D"
@@ -787,6 +809,22 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                           Slot: {item.category.toUpperCase()}
                         </span>
+                      </div>
+
+                      {/* Visual Preview in Wardrobe Card */}
+                      <div className="w-full h-24 rounded-xl bg-black/50 border border-mc-border/60 p-2 flex items-center justify-center relative overflow-hidden">
+                        {item.texture_url ? (
+                          <img
+                            src={item.texture_url}
+                            alt={item.name}
+                            className="max-h-16 max-w-full object-contain rounded image-rendering-pixelated drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://minotar.net/helm/Steve/64.png';
+                            }}
+                          />
+                        ) : (
+                          <ShoppingBag className="w-6 h-6 text-slate-500" />
+                        )}
                       </div>
 
                       <div>
