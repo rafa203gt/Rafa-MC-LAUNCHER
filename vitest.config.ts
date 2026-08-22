@@ -8,8 +8,9 @@ export default defineConfig({
     include: ['test/**/*.{test,spec}.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['src/main/**/*.ts']
+      reporter: ['text'],
+      include: ['src/main/**/*.ts'],
+      exclude: ['src/main/preload.ts', 'src/main/main.ts', 'dist-electron/**', 'admin-panel/**']
     }
   },
   resolve: {
