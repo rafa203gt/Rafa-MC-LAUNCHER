@@ -219,33 +219,33 @@ export class CosmeticsManager {
     };
 
     if (!cleanUser) return fallback;
-    if (!this.SUPABASE_URL || !this.SUPABASE_KEY) {
-      this.localEconomy.set(cleanUser, fallback);
-      return fallback;
-    }
 
-    try {
-      const res = await axios.get(
-        `${this.SUPABASE_URL}/rest/v1/user_economy?username=eq.${encodeURIComponent(cleanUser)}`,
-        { headers: this.headers, timeout: 8000 }
-      );
+    if (this.SUPABASE_URL && this.SUPABASE_KEY) {
+      try {
+        const res = await axios.get(
+          `${this.SUPABASE_URL}/rest/v1/user_economy?username=eq.${encodeURIComponent(cleanUser)}`,
+          { headers: this.headers, timeout: 8000 }
+        );
 
-      if (res.data && res.data.length > 0) {
-        this.localEconomy.set(cleanUser, res.data[0]);
-        return res.data[0];
+        if (res.data && res.data.length > 0) {
+          const remote = res.data[0];
+          this.localEconomy.set(cleanUser, remote);
+          return remote;
+        }
+
+        // Crear registro inicial si no existe
+        await axios.post(`${this.SUPABASE_URL}/rest/v1/user_economy`, fallback, {
+          headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' },
+          timeout: 8000
+        });
+        this.localEconomy.set(cleanUser, fallback);
+        return fallback;
+      } catch (err: any) {
+        console.warn('[CosmeticsManager] Error obteniendo economía remota de usuario:', err.message);
       }
-
-      // Crear registro inicial si no existe
-      await axios.post(`${this.SUPABASE_URL}/rest/v1/user_economy`, fallback, {
-        headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' },
-        timeout: 8000
-      });
-      this.localEconomy.set(cleanUser, fallback);
-      return fallback;
-    } catch (err: any) {
-      console.warn('[CosmeticsManager] Error obteniendo economía de usuario:', err.message);
-      return fallback;
     }
+
+    return this.localEconomy.get(cleanUser) || fallback;
   }
 
   /**
