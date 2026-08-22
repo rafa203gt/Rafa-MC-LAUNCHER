@@ -186,15 +186,21 @@ export class RemoteConfigManager {
   public async fetchRemoteInstances(): Promise<any[]> {
     if (!this.supabase) return [];
     try {
-      const { data, error } = await this.supabase
+      let { data, error } = await this.supabase
         .from('instances')
         .select('*')
         .eq('is_active', true)
         .order('is_default', { ascending: false });
 
-      if (error) {
-        console.warn(`[RemoteConfig] Error obteniendo instancias remotas: ${error.message}`);
-        return [];
+      if (error || !data || data.length === 0) {
+        const alt = await this.supabase
+          .from('remote_instances')
+          .select('*')
+          .eq('is_active', true)
+          .order('is_default', { ascending: false });
+        if (!alt.error && alt.data && alt.data.length > 0) {
+          data = alt.data;
+        }
       }
       return data || [];
     } catch {

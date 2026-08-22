@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu, Box, Flame } from 'lucide-react';
+import { Plus, Check, Play, FolderOpen, Trash2, Layers, Search, Sparkles, Cpu, Box, Flame, RefreshCw } from 'lucide-react';
 import { MinecraftInstance } from '../types';
 import { CreateInstanceModal } from './CreateInstanceModal';
 
@@ -16,8 +16,10 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const loadInstances = async () => {
+    setIsSyncing(true);
     try {
       if (window.launcherAPI?.getInstances) {
         const list = await window.launcherAPI.getInstances();
@@ -27,6 +29,7 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
       console.error('Error cargando instancias:', err);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -100,6 +103,16 @@ export const InstancesView: React.FC<InstancesViewProps> = ({
               className="w-full bg-mc-darker border border-mc-border focus:border-emerald-500 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none transition-all"
             />
           </div>
+
+          <button
+            onClick={loadInstances}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-700 shadow-sm transition-all active:scale-95 shrink-0"
+            title="Sincronizar instancias y modpacks remotos"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
+            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
+          </button>
 
           <button
             onClick={() => setIsModalOpen(true)}

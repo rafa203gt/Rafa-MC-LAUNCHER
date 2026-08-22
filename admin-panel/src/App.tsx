@@ -126,11 +126,20 @@ export const App: React.FC = () => {
       if (configData) setConfig(configData as LauncherConfig);
 
       // 2. Instances
-      const { data: instData } = await supabase
+      let { data: instData, error: instErr } = await supabase
         .from('instances')
         .select('*')
         .order('is_default', { ascending: false })
         .order('name', { ascending: true });
+
+      if (instErr || !instData || instData.length === 0) {
+        const alt = await supabase
+          .from('remote_instances')
+          .select('*')
+          .order('is_default', { ascending: false })
+          .order('name', { ascending: true });
+        if (!alt.error && alt.data) instData = alt.data;
+      }
       if (instData) setInstances(instData as RemoteInstance[]);
 
       // 3. News

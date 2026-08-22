@@ -229,11 +229,16 @@ export class InstanceManager {
           icon: r.icon || 'flame',
           bannerUrl: r.banner_url,
           isDefault: r.is_default || r.id === 'atm10',
-          isActive: r.id === this.activeInstanceId,
+          isActive: r.id === this.activeInstanceId || (r.is_default && !this.activeInstanceId),
           createdAt: r.created_at || new Date().toISOString()
         }));
 
         this.cachedInstances = [...merged, ...customLocal];
+        if (!this.cachedInstances.some((i) => i.isActive) && this.cachedInstances.length > 0) {
+          const def = this.cachedInstances.find((i) => i.isDefault) || this.cachedInstances[0];
+          def.isActive = true;
+          this.activeInstanceId = def.id;
+        }
         this.save();
       }
     } catch (err: any) {
