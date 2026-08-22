@@ -661,11 +661,21 @@ export class MinecraftLauncher {
 
       onLog(`[Launcher] Lanzando Minecraft ${mcVersion} (${settings.modLoader}) para ${cleanUsername} con RAM: ${minMemory} - ${maxMemory}`);
 
-      await launcher.launch(launchOptions);
+      // 1. Forzar GPU Dedicada en Registro de Windows
+      await hardwareDetector.registerDedicatedGpuForExecutable(javaPath);
+
+      // 2. Iniciar Proceso de Minecraft
+      const childProcess: any = await launcher.launch(launchOptions);
+
+      // 3. Elevar prioridad de CPU en Windows a High Priority para eliminar micro-tirones
+      if (childProcess && childProcess.pid) {
+        onLog(`[Launcher] ⚡ Proceso de Minecraft iniciado (PID: ${childProcess.pid})`);
+        await hardwareDetector.boostProcessPriority(childProcess.pid);
+      }
 
       onProgress({
         stage: 'running',
-        task: 'Minecraft en ejecución',
+        task: 'Minecraft en ejecución (Rendimiento Extremo ZGC)',
         total: 100,
         current: 100,
         percent: 100

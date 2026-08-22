@@ -17,7 +17,7 @@ export interface AppSettings {
   height: number;
   jvmArgs: string[];
   discordRpc?: boolean;
-  jvmProfile?: 'auto' | 'aikar' | 'zgc' | 'low_end' | 'custom';
+  jvmProfile?: 'auto' | 'zgc_turbo' | 'zgc' | 'aikar' | 'low_end' | 'custom';
   launcherBehavior?: 'tray' | 'keep' | 'close';
 }
 

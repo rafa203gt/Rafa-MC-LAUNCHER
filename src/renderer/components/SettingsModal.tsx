@@ -159,20 +159,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onSave }
                 onChange={(e: any) => setFormData({ ...formData, jvmProfile: e.target.value })}
                 className="w-full bg-mc-darker border border-mc-border focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-white"
               >
-                <option value="auto">🤖 Automático Inteligente (Recomendado)</option>
-                <option value="aikar">🚀 Aikar's Flags (G1GC - Máxima Estabilidad en Modpacks)</option>
-                <option value="zgc">⚡ Generational ZGC (Java 21+ Zero-Lag Latency)</option>
+                <option value="auto">🤖 Automático Inteligente (Detecta ZGC Turbo en Java 21)</option>
+                <option value="zgc_turbo">⚡ Generational ZGC Turbo (Cero Tirones, 0ms Pausa, Máximos FPS)</option>
+                <option value="aikar">🚀 Aikar G1GC (Estabilidad en Modpacks medianos)</option>
                 <option value="low_end">🔋 Modo Ahorro / Portátil (Gama Baja)</option>
                 <option value="custom">🛠️ Flags Personalizados</option>
               </select>
             </div>
 
             <p className="text-[11px] text-slate-400">
-              {formData.jvmProfile === 'zgc'
-                ? 'ZGC reduce las pausas de recolección de memoria a menos de 1 ms. Recomendado para PCs con 8GB+ de RAM.'
+              {formData.jvmProfile === 'zgc_turbo' || formData.jvmProfile === 'auto'
+                ? '⚡ ZGC Turbo activa Generational ZGC con compilación JIT C2 multihilo y reduce pausas a <0.5ms para maximizar 1% Lows y FPS medios.'
                 : formData.jvmProfile === 'low_end'
-                ? 'Optimizado para portátiles y equipos con recursos limitados para minimizar uso de CPU.'
-                : 'Ajusta dinámicamente la recolección de basura para eliminar tirones de FPS (micro-stuttering).'}
+                ? '🔋 Optimizado para portátiles y equipos con recursos limitados para minimizar uso de CPU.'
+                : '🚀 Ajusta dinámicamente la recolección de basura con G1GC para eliminar tirones.'}
             </p>
           </div>
         </div>

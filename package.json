@@ -1,6 +1,6 @@
 {
   "name": "rafa-mc-launcher",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "description": "Custom Minecraft Launcher with Auto-Modpack Sync and No-Premium support",
   "main": "dist-electron/main.js",
   "type": "module",

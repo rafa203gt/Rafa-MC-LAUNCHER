@@ -1,4 +1,4 @@
-export type JVMProfile = 'auto' | 'aikar' | 'zgc' | 'low_end' | 'custom';
+export type JVMProfile = 'auto' | 'zgc_turbo' | 'aikar' | 'low_end' | 'custom';
 
 export class JVMOptimizer {
   public static getOptimizedFlags(
@@ -13,10 +13,10 @@ export class JVMOptimizer {
 
     let activeProfile = profile;
     if (profile === 'auto') {
-      // If Java 21+ and RAM is at least 8GB, ZGC is supreme; otherwise Aikar G1GC
-      if (javaVersion >= 21 && allocatedRamMb >= 8192) {
-        activeProfile = 'zgc';
-      } else if (allocatedRamMb <= 3072) {
+      // In Java 21+ with 5GB+ RAM, Generational ZGC Turbo is undisputed king for frame pacing and 0ms stutters
+      if (javaVersion >= 21 && allocatedRamMb >= 5120) {
+        activeProfile = 'zgc_turbo';
+      } else if (allocatedRamMb <= 3500) {
         activeProfile = 'low_end';
       } else {
         activeProfile = 'aikar';
@@ -24,29 +24,40 @@ export class JVMOptimizer {
     }
 
     switch (activeProfile) {
-      case 'zgc':
+      case 'zgc_turbo':
         return [
           '-XX:+UseZGC',
           ...(javaVersion >= 21 ? ['-XX:+ZGenerational'] : []),
           '-XX:+AlwaysPreTouch',
           '-XX:+DisableExplicitGC',
           '-XX:+PerfDisableSharedMem',
+          '-XX:+UseFastAccessorMethods',
+          '-XX:+OptimizeStringConcat',
+          '-XX:+UseStringDeduplication',
+          '-XX:+UseCompressedOops',
+          '-XX:+UseCompressedClassPointers',
+          '-XX:CICompilerCount=4',
+          '-XX:ParallelGCThreads=4',
+          '-XX:ConcGCThreads=2',
           '-Dsun.rmi.dgc.server.gcInterval=2147483646',
-          '-Dsun.rmi.dgc.client.gcInterval=2147483646'
+          '-Dsun.rmi.dgc.client.gcInterval=2147483646',
+          '-Djava.net.preferIPv4Stack=true'
         ];
 
       case 'low_end':
         return [
           '-XX:+UseG1GC',
           '-XX:+ParallelRefProcEnabled',
-          '-XX:MaxGCPauseMillis=150',
+          '-XX:MaxGCPauseMillis=120',
           '-XX:+UnlockExperimentalVMOptions',
           '-XX:+DisableExplicitGC',
           '-XX:+AlwaysPreTouch',
           '-XX:G1NewSizePercent=20',
           '-XX:G1MaxNewSizePercent=30',
           '-XX:G1ReservePercent=15',
-          '-XX:+PerfDisableSharedMem'
+          '-XX:+PerfDisableSharedMem',
+          '-XX:+UseFastAccessorMethods',
+          '-XX:+OptimizeStringConcat'
         ];
 
       case 'aikar':
@@ -54,7 +65,7 @@ export class JVMOptimizer {
         return [
           '-XX:+UseG1GC',
           '-XX:+ParallelRefProcEnabled',
-          '-XX:MaxGCPauseMillis=200',
+          '-XX:MaxGCPauseMillis=150',
           '-XX:+UnlockExperimentalVMOptions',
           '-XX:+DisableExplicitGC',
           '-XX:+AlwaysPreTouch',
@@ -69,6 +80,10 @@ export class JVMOptimizer {
           '-XX:SurvivorRatio=32',
           '-XX:+PerfDisableSharedMem',
           '-XX:MaxTenuringThreshold=1',
+          '-XX:+UseFastAccessorMethods',
+          '-XX:+OptimizeStringConcat',
+          '-XX:+UseStringDeduplication',
+          '-XX:CICompilerCount=4',
           '-Dsun.rmi.dgc.server.gcInterval=2147483646',
           '-Dsun.rmi.dgc.client.gcInterval=2147483646'
         ];

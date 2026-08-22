@@ -88,7 +88,6 @@ export class HardwareDetector {
 
   public getGpuForceEnv(): NodeJS.ProcessEnv {
     return {
-      // Windows / NVIDIA Prime & High-Performance flags
       SHIM_MCCOMPAT: '0x800000001',
       __NV_PRIME_RENDER_OFFLOAD: '1',
       __GLX_VENDOR_LIBRARY_NAME: 'nvidia',
@@ -99,6 +98,31 @@ export class HardwareDetector {
       GPU_MAX_ALLOC_PERCENT: '100',
       GPU_SINGLE_ALLOC_PERCENT: '100'
     };
+  }
+
+  public async registerDedicatedGpuForExecutable(exePath: string): Promise<void> {
+    if (process.platform !== 'win32' || !exePath) return;
+    try {
+      const regKey = 'HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences';
+      const psCommand = `
+        if (!(Test-Path '${regKey}')) { New-Item -Path '${regKey}' -Force | Out-Null };
+        Set-ItemProperty -Path '${regKey}' -Name '${exePath.replace(/'/g, "''")}' -Value 'GpuPreference=2;' -Force;
+      `;
+      await execAsync(`powershell -NoProfile -Command "${psCommand.replace(/\r?\n/g, ' ')}"`);
+      console.log(`[Hardware] 🚀 GPU de Alto Rendimiento forzada en Registro de Windows para: ${exePath}`);
+    } catch (err: any) {
+      console.warn(`[Hardware] No se pudo escribir preferencia de GPU en registro: ${err.message}`);
+    }
+  }
+
+  public async boostProcessPriority(pid: number): Promise<void> {
+    if (process.platform !== 'win32' || !pid) return;
+    try {
+      await execAsync(
+        `powershell -NoProfile -Command "try { (Get-Process -Id ${pid} -ErrorAction Stop).PriorityClass = 'High' } catch {}"`
+      );
+      console.log(`[Hardware] ⚡ Prioridad de CPU elevada a 'High' para PID ${pid}`);
+    } catch {}
   }
 }
 
