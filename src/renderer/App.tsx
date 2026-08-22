@@ -12,6 +12,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ConsoleModal } from './components/ConsoleModal';
 import { ShadersModal } from './components/ShadersModal';
 import { SkinsView } from './components/SkinsView';
+import { ShopAndWardrobeView } from './components/ShopAndWardrobeView';
 import { CrashAssistantModal } from './components/CrashAssistantModal';
 import {
   AppSettings,
@@ -24,7 +25,9 @@ import {
 } from './types';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console'>('play');
+  const [activeTab, setActiveTab] = useState<
+    'play' | 'instances' | 'skins' | 'cosmetics' | 'mods' | 'settings' | 'console'
+  >('play');
   const [activeInstance, setActiveInstance] = useState<MinecraftInstance | null>(null);
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
@@ -437,6 +440,10 @@ export const App: React.FC = () => {
               handleSaveSettings({ username: newUsername });
             }}
           />
+        )}
+
+        {activeTab === 'cosmetics' && (
+          <ShopAndWardrobeView currentUsername={username} />
         )}
 
         {activeTab === 'mods' && <ModpackView />}

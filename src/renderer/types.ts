@@ -213,6 +213,51 @@ export interface LauncherAPI {
   removeAccount?: (accountId: string) => Promise<boolean>;
   addOfflineAccount?: (username: string) => Promise<UserAccount>;
   loginMicrosoft?: () => Promise<UserAccount>;
+
+  // Cosmetics & Shop System
+  getCosmeticsCatalog?: () => Promise<ShopCosmetic[]>;
+  getUserCosmeticsInventory?: (username: string) => Promise<string[]>;
+  getUserEquippedCosmetics?: (username: string) => Promise<UserEquippedCosmetics>;
+  equipCosmetic?: (username: string, slot: 'cape' | 'wings' | 'hat' | 'bandana', cosmeticId: string | null, uuid?: string) => Promise<UserEquippedCosmetics>;
+  buyCosmetic?: (username: string, cosmeticId: string) => Promise<{ success: boolean; message: string; remainingCoins: number }>;
+  getUserEconomy?: (username: string) => Promise<UserEconomy>;
+  claimDailyCoins?: (username: string) => Promise<{ success: boolean; message: string; coinsAdded: number; newBalance: number }>;
+}
+
+export interface ShopCosmetic {
+  id: string;
+  name: string;
+  description: string;
+  category: 'cape' | 'wings' | 'hat' | 'bandana' | 'pet';
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  price: number;
+  texture_url: string;
+  model_type: string;
+  is_animated: boolean;
+  is_featured: boolean;
+  is_active: boolean;
+}
+
+export interface UserEquippedCosmetics {
+  username: string;
+  uuid?: string;
+  cape_id?: string | null;
+  wings_id?: string | null;
+  hat_id?: string | null;
+  bandana_id?: string | null;
+  updated_at?: string;
+  cape?: ShopCosmetic | null;
+  wings?: ShopCosmetic | null;
+  hat?: ShopCosmetic | null;
+  bandana?: ShopCosmetic | null;
+}
+
+export interface UserEconomy {
+  username: string;
+  coins: number;
+  playtime_minutes: number;
+  last_daily_reward: string;
+  updated_at?: string;
 }
 
 declare global {

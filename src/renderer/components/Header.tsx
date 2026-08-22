@@ -1,9 +1,9 @@
 import React from 'react';
-import { Minus, Square, X, Gamepad2, Settings, Box, Terminal, Layers, Palette } from 'lucide-react';
+import { Minus, Square, X, Gamepad2, Settings, Box, Terminal, Layers, Palette, ShoppingBag } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console';
-  setActiveTab: (tab: 'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console') => void;
+  activeTab: 'play' | 'instances' | 'skins' | 'cosmetics' | 'mods' | 'settings' | 'console';
+  setActiveTab: (tab: 'play' | 'instances' | 'skins' | 'cosmetics' | 'mods' | 'settings' | 'console') => void;
   statusText: string;
   activeInstanceName?: string;
   appVersion?: string;
@@ -88,7 +88,19 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           <Palette className="w-3.5 h-3.5 text-purple-400" />
-          Skins 3D
+          Skins
+        </button>
+
+        <button
+          onClick={() => setActiveTab('cosmetics')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            activeTab === 'cosmetics'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-mc-card'
+          }`}
+        >
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+          Tienda & Armario
         </button>
 
         <button

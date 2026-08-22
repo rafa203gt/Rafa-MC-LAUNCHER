@@ -49,10 +49,13 @@ import { CrashAnalytics } from './components/CrashAnalytics';
 import { LiveServerMonitor } from './components/LiveServerMonitor';
 import { CloudAssetManager } from './components/CloudAssetManager';
 import { UsersAnalytics } from './components/UsersAnalytics';
+import { CosmeticsStoreManager } from './components/CosmeticsStoreManager';
+import { ShoppingBag } from 'lucide-react';
 
 type TabKey =
   | 'cloud_assets'
   | 'instances'
+  | 'cosmetics'
   | 'users'
   | 'mods'
   | 'shaders'
@@ -375,6 +378,14 @@ export const App: React.FC = () => {
           badgeStyle: 'bg-blue-500/15 text-blue-300 border-blue-500/25'
         },
         {
+          key: 'cosmetics' as TabKey,
+          label: 'Tienda de Cosméticos',
+          icon: ShoppingBag,
+          accent: 'amber',
+          badge: 'NEW',
+          badgeStyle: 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+        },
+        {
           key: 'mods' as TabKey,
           label: 'Gestor de Mods .JAR',
           icon: Layers,
@@ -476,6 +487,7 @@ export const App: React.FC = () => {
   const tabMeta: Record<TabKey, { title: string; subtitle: string; icon: any; gradient: string }> = {
     cloud_assets: { title: 'Almacenamiento Ilimitado de Modpacks', subtitle: 'Sube modpacks enteros en .ZIP, sincroniza mods, configs, kubejs y shaders sin límite.', icon: Cloud, gradient: 'from-indigo-500 to-purple-600' },
     instances: { title: 'Catálogo de Instancias & Modpacks', subtitle: 'Crea, edita y administra los perfiles de juego visibles para los usuarios.', icon: Box, gradient: 'from-blue-500 to-indigo-600' },
+    cosmetics: { title: 'Gestión de Tienda & Cosméticos', subtitle: 'Crea items para la tienda de Rafa Coins, sube texturas de capas y alas 3D.', icon: ShoppingBag, gradient: 'from-amber-500 to-yellow-600' },
     users: { title: 'Telemetría de Jugadores & Dispositivos', subtitle: 'Historial de jugadores, computadoras, direcciones IP públicas, RAM y sesiones.', icon: Users, gradient: 'from-emerald-500 to-teal-600' },
     mods: { title: 'Gestor de Mods .JAR', subtitle: 'Control individual de activación y eliminación de mods ejecutables.', icon: Layers, gradient: 'from-purple-500 to-pink-600' },
     shaders: { title: 'Shaders & Resourcepacks', subtitle: 'Packs gráficos recomendados y distribución remota a los clientes.', icon: Sparkles, gradient: 'from-amber-500 to-orange-600' },
@@ -746,6 +758,7 @@ export const App: React.FC = () => {
             <div className="max-w-7xl mx-auto space-y-6 animate-fadeIn">
               {activeTab === 'cloud_assets' && <CloudAssetManager />}
               {activeTab === 'instances' && <InstancesManager instances={instances} onRefresh={fetchData} />}
+              {activeTab === 'cosmetics' && <CosmeticsStoreManager />}
               {activeTab === 'users' && <UsersAnalytics users={users} onRefresh={fetchData} isLoading={isLoading} />}
               {activeTab === 'mods' && <ModpackManager mods={mods} instances={instances} onRefresh={fetchData} />}
               {activeTab === 'shaders' && <ShadersManager shaders={shaders} onRefresh={fetchData} />}

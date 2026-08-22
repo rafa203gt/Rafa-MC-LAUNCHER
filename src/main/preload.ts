@@ -114,7 +114,17 @@ export const API = {
   setActiveAccount: (accountId: string) => ipcRenderer.invoke('auth:set-active-account', accountId),
   removeAccount: (accountId: string) => ipcRenderer.invoke('auth:remove-account', accountId),
   addOfflineAccount: (username: string) => ipcRenderer.invoke('auth:add-offline-account', username),
-  loginMicrosoft: () => ipcRenderer.invoke('auth:login-microsoft')
+  loginMicrosoft: () => ipcRenderer.invoke('auth:login-microsoft'),
+
+  // Cosmetics & Shop System
+  getCosmeticsCatalog: () => ipcRenderer.invoke('cosmetics:get-catalog'),
+  getUserCosmeticsInventory: (username: string) => ipcRenderer.invoke('cosmetics:get-inventory', username),
+  getUserEquippedCosmetics: (username: string) => ipcRenderer.invoke('cosmetics:get-equipped', username),
+  equipCosmetic: (username: string, slot: 'cape' | 'wings' | 'hat' | 'bandana', cosmeticId: string | null, uuid?: string) =>
+    ipcRenderer.invoke('cosmetics:equip', username, slot, cosmeticId, uuid),
+  buyCosmetic: (username: string, cosmeticId: string) => ipcRenderer.invoke('cosmetics:buy', username, cosmeticId),
+  getUserEconomy: (username: string) => ipcRenderer.invoke('cosmetics:get-economy', username),
+  claimDailyCoins: (username: string) => ipcRenderer.invoke('cosmetics:claim-daily', username)
 };
 
 contextBridge.exposeInMainWorld('launcherAPI', API);

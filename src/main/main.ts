@@ -434,4 +434,41 @@ ipcMain.handle('auth:login-microsoft', async () => {
   return authManager.loginWithMicrosoft(mainWindow || undefined);
 });
 
+// Cosmetics & Shop System
+ipcMain.handle('cosmetics:get-catalog', async () => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.getCatalog();
+});
+
+ipcMain.handle('cosmetics:get-inventory', async (_event, username: string) => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.getUserInventory(username);
+});
+
+ipcMain.handle('cosmetics:get-equipped', async (_event, username: string) => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.getUserEquipped(username);
+});
+
+ipcMain.handle('cosmetics:equip', async (_event, username: string, slot: 'cape' | 'wings' | 'hat' | 'bandana', cosmeticId: string | null, uuid?: string) => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.equipCosmetic(username, slot, cosmeticId, uuid);
+});
+
+ipcMain.handle('cosmetics:buy', async (_event, username: string, cosmeticId: string) => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.buyCosmetic(username, cosmeticId);
+});
+
+ipcMain.handle('cosmetics:get-economy', async (_event, username: string) => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.getUserEconomy(username);
+});
+
+ipcMain.handle('cosmetics:claim-daily', async (_event, username: string) => {
+  const { cosmeticsManager } = await import('./cosmetics-manager');
+  return cosmeticsManager.claimDailyCoins(username);
+});
+
+
 
