@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { safeStorage } from 'electron';
+import { safeStorage, BrowserWindow } from 'electron';
 import axios from 'axios';
 import crypto from 'node:crypto';
 import { configStore } from './config-store';
@@ -26,19 +26,11 @@ export interface MicrosoftAccount {
   };
 }
 
-export interface DeviceCodeResponse {
-  userCode: string;
-  deviceCode: string;
-  verificationUri: string;
-  expiresIn: number;
-  interval: number;
-  message: string;
-}
-
 export class AuthManager {
-  private readonly CLIENT_ID = '00000000402b5328'; // Standard Public Desktop Microsoft OAuth Client ID for Minecraft
+  private readonly CLIENT_ID = '00000000402b5328'; // Official Mojang Public Desktop Client ID
+  private readonly REDIRECT_URI = 'https://login.live.com/oauth20_desktop.srf';
+  private readonly SCOPE = 'service::user.auth.xboxlive.com::MBI_SSL';
   private accounts: MicrosoftAccount[] = [];
-  private activeDeviceCodePollAbort: AbortController | null = null;
 
   constructor() {
     this.loadAccounts();
@@ -62,7 +54,8 @@ export class AuthManager {
       const buffer = fs.readFileSync(filePath);
       let jsonStr = '';
 
-      const isSafeAvailable = typeof safeStorage?.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable();
+      const isSafeAvailable =
+        typeof safeStorage?.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable();
 
       if (isSafeAvailable) {
         jsonStr = safeStorage.decryptString(buffer);
@@ -92,7 +85,8 @@ export class AuthManager {
     const jsonStr = JSON.stringify(this.accounts, null, 2);
 
     try {
-      const isSafeAvailable = typeof safeStorage?.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable();
+      const isSafeAvailable =
+        typeof safeStorage?.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable();
 
       if (isSafeAvailable) {
         const encrypted = safeStorage.encryptString(jsonStr);
@@ -199,116 +193,108 @@ export class AuthManager {
   }
 
   /**
-   * PASO 1: Inicia el flujo Device Code de Microsoft OAuth 2.0.
+   * Inicia el flujo de autenticación oficial de Microsoft abriendo una ventana segura.
    */
-  public async startMicrosoftDeviceCode(): Promise<DeviceCodeResponse> {
-    if (this.activeDeviceCodePollAbort) {
-      this.activeDeviceCodePollAbort.abort();
-    }
-    this.activeDeviceCodePollAbort = new AbortController();
+  public loginWithMicrosoft(parentWindow?: BrowserWindow): Promise<MicrosoftAccount> {
+    return new Promise((resolve, reject) => {
+      const loginUrl = `https://login.live.com/oauth20_authorize.srf?client_id=${this.CLIENT_ID}&response_type=code&scope=${encodeURIComponent(
+        this.SCOPE
+      )}&redirect_uri=${encodeURIComponent(this.REDIRECT_URI)}`;
 
-    const params = new URLSearchParams({
-      client_id: this.CLIENT_ID,
-      scope: 'XboxLive.signin offline_access',
-      response_type: 'device_code'
+      const authWindow = new BrowserWindow({
+        width: 520,
+        height: 680,
+        title: 'Iniciar Sesión con Microsoft - Rafa Launcher',
+        parent: parentWindow || undefined,
+        modal: true,
+        show: true,
+        autoHideMenuBar: true,
+        backgroundColor: '#121620',
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+
+      let isResolved = false;
+
+      const handleCallback = async (targetUrl: string) => {
+        if (targetUrl.startsWith(this.REDIRECT_URI)) {
+          const urlObj = new URL(targetUrl);
+          const code = urlObj.searchParams.get('code');
+          const error = urlObj.searchParams.get('error_description') || urlObj.searchParams.get('error');
+
+          if (code) {
+            isResolved = true;
+            authWindow.destroy();
+
+            try {
+              // 1. Canjear código de autorización por tokens
+              const tokenParams = new URLSearchParams({
+                client_id: this.CLIENT_ID,
+                code,
+                grant_type: 'authorization_code',
+                redirect_uri: this.REDIRECT_URI,
+                scope: this.SCOPE
+              });
+
+              const tokenRes = await axios.post(
+                'https://login.live.com/oauth20_token.srf',
+                tokenParams.toString(),
+                {
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  timeout: 15000
+                }
+              );
+
+              const msAccessToken = tokenRes.data.access_token;
+              const msRefreshToken = tokenRes.data.refresh_token;
+              const msExpiresIn = tokenRes.data.expires_in || 86400;
+
+              // 2. Completar la cadena completa de autenticación Xbox -> Mojang
+              const account = await this.completeMinecraftAuthChain(
+                msAccessToken,
+                msRefreshToken,
+                msExpiresIn
+              );
+              resolve(account);
+            } catch (err: any) {
+              reject(new Error(`Error completando inicio de sesión: ${err.message || err}`));
+            }
+          } else if (error) {
+            isResolved = true;
+            authWindow.destroy();
+            reject(new Error(`Inicio de sesión cancelado o denegado: ${error}`));
+          }
+        }
+      };
+
+      authWindow.webContents.on('will-redirect', (_event, url) => {
+        handleCallback(url);
+      });
+
+      authWindow.webContents.on('will-navigate', (_event, url) => {
+        handleCallback(url);
+      });
+
+      authWindow.webContents.on('did-navigate', (_event, url) => {
+        handleCallback(url);
+      });
+
+      authWindow.on('closed', () => {
+        if (!isResolved) {
+          reject(new Error('Ventana de inicio de sesión cerrada'));
+        }
+      });
+
+      authWindow.loadURL(loginUrl);
     });
-
-    const res = await axios.post(
-      'https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode',
-      params.toString(),
-      {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 10000
-      }
-    );
-
-    const data = res.data;
-    return {
-      userCode: data.user_code,
-      deviceCode: data.device_code,
-      verificationUri: data.verification_uri,
-      expiresIn: data.expires_in,
-      interval: data.interval || 5,
-      message: data.message
-    };
-  }
-
-  /**
-   * PASO 2: Sondea el endpoint de token hasta que el usuario complete el login en su navegador.
-   */
-  public async pollMicrosoftDeviceCode(
-    deviceCode: string,
-    intervalSec = 5,
-    expiresInSec = 900
-  ): Promise<MicrosoftAccount> {
-    const startTime = Date.now();
-    const intervalMs = Math.max(2000, intervalSec * 1000);
-    const maxTimeMs = expiresInSec * 1000;
-
-    while (Date.now() - startTime < maxTimeMs) {
-      if (this.activeDeviceCodePollAbort?.signal.aborted) {
-        throw new Error('Autenticación cancelada por el usuario');
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-
-      try {
-        const tokenParams = new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-          client_id: this.CLIENT_ID,
-          device_code: deviceCode
-        });
-
-        const tokenRes = await axios.post(
-          'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
-          tokenParams.toString(),
-          {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            timeout: 10000
-          }
-        );
-
-        if (tokenRes.data && tokenRes.data.access_token) {
-          const msAccessToken = tokenRes.data.access_token;
-          const msRefreshToken = tokenRes.data.refresh_token;
-          const msExpiresIn = tokenRes.data.expires_in || 86400;
-
-          // Completar la cadena completa de autenticación de Xbox y Mojang
-          return await this.completeMinecraftAuthChain(msAccessToken, msRefreshToken, msExpiresIn);
-        }
-      } catch (err: any) {
-        if (err.response && err.response.data) {
-          const errorType = err.response.data.error;
-          if (errorType === 'authorization_pending') {
-            // El usuario aún no ha introducido el código, seguir sondeando
-            continue;
-          } else if (errorType === 'slow_down') {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-            continue;
-          } else if (errorType === 'expired_token') {
-            throw new Error('El código de verificación ha expirado. Por favor, inténtalo de nuevo.');
-          } else if (errorType === 'access_denied') {
-            throw new Error('Acceso denegado por el usuario.');
-          }
-        }
-        throw err;
-      }
-    }
-
-    throw new Error('Tiempo de espera agotado para la autenticación de Microsoft');
-  }
-
-  public cancelDeviceCodePoll(): void {
-    if (this.activeDeviceCodePollAbort) {
-      this.activeDeviceCodePollAbort.abort();
-      this.activeDeviceCodePollAbort = null;
-    }
   }
 
   /**
    * Ejecuta la cadena de validación: Xbox Live -> XSTS -> Mojang Auth -> Perfil & Entitlements.
    */
-  private async completeMinecraftAuthChain(
+  public async completeMinecraftAuthChain(
     msAccessToken: string,
     msRefreshToken: string,
     msExpiresIn: number
@@ -514,11 +500,12 @@ export class AuthManager {
       grant_type: 'refresh_token',
       client_id: this.CLIENT_ID,
       refresh_token: account.tokens.msRefreshToken,
-      scope: 'XboxLive.signin offline_access'
+      redirect_uri: this.REDIRECT_URI,
+      scope: this.SCOPE
     });
 
     const res = await axios.post(
-      'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
+      'https://login.live.com/oauth20_token.srf',
       params.toString(),
       {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

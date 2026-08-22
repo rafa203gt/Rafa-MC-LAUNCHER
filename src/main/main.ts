@@ -429,20 +429,9 @@ ipcMain.handle('auth:add-offline-account', async (_event, username: string) => {
   return authManager.addOfflineAccount(username);
 });
 
-ipcMain.handle('auth:start-microsoft-login', async () => {
+ipcMain.handle('auth:login-microsoft', async () => {
   const { authManager } = await import('./auth-manager');
-  return authManager.startMicrosoftDeviceCode();
-});
-
-ipcMain.handle('auth:poll-microsoft-login', async (_event, deviceCode: string, interval?: number, expiresIn?: number) => {
-  const { authManager } = await import('./auth-manager');
-  return authManager.pollMicrosoftDeviceCode(deviceCode, interval, expiresIn);
-});
-
-ipcMain.handle('auth:cancel-microsoft-login', async () => {
-  const { authManager } = await import('./auth-manager');
-  authManager.cancelDeviceCodePoll();
-  return true;
+  return authManager.loginWithMicrosoft(mainWindow || undefined);
 });
 
 

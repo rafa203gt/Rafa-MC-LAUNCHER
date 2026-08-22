@@ -6,16 +6,11 @@ import {
   Plus,
   Trash2,
   Check,
-  ExternalLink,
-  Copy,
-  CheckCircle2,
   AlertCircle,
   Loader2,
-  Sparkles,
-  KeyRound,
-  Gamepad2
+  KeyRound
 } from 'lucide-react';
-import { UserAccount, DeviceCodeInfo } from '../types';
+import { UserAccount } from '../types';
 
 interface AccountManagerModalProps {
   isOpen: boolean;
@@ -31,13 +26,10 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
   onAccountSwitched
 }) => {
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
-  const [activeTab, setActiveTab] = useState<'list' | 'add_microsoft' | 'add_offline'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'add_offline'>('list');
   const [offlineName, setOfflineName] = useState('');
-  const [deviceCodeInfo, setDeviceCodeInfo] = useState<DeviceCodeInfo | null>(null);
-  const [isStartingMs, setIsStartingMs] = useState(false);
-  const [isPollingMs, setIsPollingMs] = useState(false);
-  const [pollError, setPollError] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [isLoggingInMs, setIsLoggingInMs] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const fetchAccounts = async () => {
     if (window.launcherAPI?.getAccounts) {
@@ -54,12 +46,8 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
     if (isOpen) {
       fetchAccounts();
       setActiveTab('list');
-      setPollError(null);
-      setDeviceCodeInfo(null);
-    } else {
-      if (window.launcherAPI?.cancelMicrosoftLogin) {
-        window.launcherAPI.cancelMicrosoftLogin();
-      }
+      setLoginError(null);
+      setIsLoggingInMs(false);
     }
   }, [isOpen]);
 
@@ -97,45 +85,21 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
     }
   };
 
-  const handleStartMicrosoftLogin = async () => {
-    setIsStartingMs(true);
-    setPollError(null);
-    setDeviceCodeInfo(null);
+  const handleMicrosoftLogin = async () => {
+    setIsLoggingInMs(true);
+    setLoginError(null);
 
     try {
-      if (window.launcherAPI?.startMicrosoftLogin) {
-        const info = await window.launcherAPI.startMicrosoftLogin();
-        setDeviceCodeInfo(info);
-        setIsStartingMs(false);
-        setIsPollingMs(true);
-
-        // Iniciar polling
-        if (window.launcherAPI?.pollMicrosoftLogin) {
-          const account = await window.launcherAPI.pollMicrosoftLogin(info.deviceCode, info.interval, info.expiresIn);
-          setIsPollingMs(false);
-          await fetchAccounts();
-          onAccountSwitched(account);
-          setActiveTab('list');
-          onClose();
-        }
+      if (window.launcherAPI?.loginMicrosoft) {
+        const account = await window.launcherAPI.loginMicrosoft();
+        await fetchAccounts();
+        onAccountSwitched(account);
+        onClose();
       }
     } catch (err: any) {
-      setIsStartingMs(false);
-      setIsPollingMs(false);
-      setPollError(err.message || 'Error durante la autenticación de Microsoft');
-    }
-  };
-
-  const handleCopyCode = () => {
-    if (!deviceCodeInfo?.userCode) return;
-    navigator.clipboard.writeText(deviceCodeInfo.userCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2500);
-  };
-
-  const handleOpenBrowser = () => {
-    if (deviceCodeInfo?.verificationUri) {
-      window.open(deviceCodeInfo.verificationUri, '_blank');
+      setLoginError(err.message || 'Inicio de sesión cancelado o denegado');
+    } finally {
+      setIsLoggingInMs(false);
     }
   };
 
@@ -147,13 +111,13 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
         {/* Header */}
         <div className="p-6 border-b border-mc-border/60 flex items-center justify-between bg-mc-darker/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-glow">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-glow">
               <KeyRound className="w-5 h-5 text-white" />
             </div>
             <div>
               <h3 className="text-lg font-black text-white flex items-center gap-2">
                 Gestor de Cuentas
-                <span className="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full font-bold border border-emerald-500/30">
+                <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full font-bold border border-blue-500/30">
                   Dual Auth
                 </span>
               </h3>
@@ -171,6 +135,20 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
+          {loginError && (
+            <div className="flex items-center gap-2 p-3.5 bg-red-500/15 border border-red-500/30 text-red-300 rounded-2xl text-xs font-bold animate-fadeIn">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{loginError}</span>
+            </div>
+          )}
+
+          {isLoggingInMs && (
+            <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-2xl flex items-center justify-center gap-3 text-blue-300 text-xs font-bold animate-pulse">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+              Iniciando sesión en la ventana oficial de Microsoft...
+            </div>
+          )}
+
           {/* Tabs */}
           {activeTab === 'list' && (
             <div className="space-y-4">
@@ -178,11 +156,9 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Cuentas Guardadas</span>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      setActiveTab('add_microsoft');
-                      handleStartMicrosoftLogin();
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow transition-all active:scale-95"
+                    onClick={handleMicrosoftLogin}
+                    disabled={isLoggingInMs}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow transition-all active:scale-95 disabled:opacity-50"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Cuenta Microsoft
@@ -221,7 +197,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
                         onClick={() => handleSwitchAccount(acc)}
                         className={`group relative p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                           isSelected
-                            ? 'bg-emerald-500/10 border-emerald-500/50 shadow-glow'
+                            ? 'bg-blue-500/10 border-blue-500/50 shadow-glow'
                             : 'bg-mc-darker/80 border-mc-border/60 hover:border-slate-600 hover:bg-white/5'
                         }`}
                       >
@@ -263,7 +239,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
 
                         <div className="flex items-center gap-2">
                           {isSelected && (
-                            <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-1 rounded-xl border border-emerald-500/30">
+                            <span className="flex items-center gap-1 text-xs font-bold text-blue-400 bg-blue-500/20 px-2.5 py-1 rounded-xl border border-blue-500/30">
                               <Check className="w-3.5 h-3.5" />
                               Activa
                             </span>
@@ -281,84 +257,6 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({
                   })
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Tab: Add Microsoft (Device Code Flow) */}
-          {activeTab === 'add_microsoft' && (
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    setActiveTab('list');
-                    if (window.launcherAPI?.cancelMicrosoftLogin) window.launcherAPI.cancelMicrosoftLogin();
-                  }}
-                  className="text-xs font-bold text-slate-400 hover:text-white transition-colors"
-                >
-                  ← Volver a la lista
-                </button>
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">
-                  Inicio Seguro de Microsoft
-                </span>
-              </div>
-
-              {isStartingMs ? (
-                <div className="p-10 text-center space-y-3">
-                  <Loader2 className="w-8 h-8 text-blue-400 animate-spin mx-auto" />
-                  <p className="text-sm font-bold text-white">Generando código de autenticación seguro...</p>
-                </div>
-              ) : deviceCodeInfo ? (
-                <div className="bg-mc-darker/90 border border-mc-border/80 rounded-2xl p-6 space-y-5">
-                  <div className="text-center space-y-2">
-                    <p className="text-xs text-slate-300">
-                      1. Copia tu código de verificación temporal e inicia sesión en la web oficial de Microsoft:
-                    </p>
-
-                    {/* Big Code Box */}
-                    <div className="flex items-center justify-center gap-3 bg-black/60 border border-blue-500/40 rounded-2xl p-4 my-2">
-                      <span className="text-2xl font-mono font-black text-blue-400 tracking-widest select-all">
-                        {deviceCodeInfo.userCode}
-                      </span>
-                      <button
-                        onClick={handleCopyCode}
-                        className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
-                      >
-                        {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        {copiedCode ? '¡Copiado!' : 'Copiar'}
-                      </button>
-                    </div>
-
-                    <p className="text-[11px] text-slate-400">
-                      Válido por {Math.floor(deviceCodeInfo.expiresIn / 60)} minutos
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex flex-col gap-2.5">
-                    <button
-                      onClick={handleOpenBrowser}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-sm font-black shadow-glow transition-all active:scale-95"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      2. Abrir Microsoft Login (microsoft.com/link)
-                    </button>
-                  </div>
-
-                  {/* Polling Live Indicator */}
-                  {isPollingMs && (
-                    <div className="flex items-center justify-center gap-2 text-xs text-amber-300 font-bold bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
-                      <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                      Esperando que autorices el acceso en el navegador...
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {pollError && (
-                <div className="flex items-center gap-2 p-3.5 bg-red-500/15 border border-red-500/30 text-red-300 rounded-2xl text-xs font-bold">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{pollError}</span>
-                </div>
-              )}
             </div>
           )}
 

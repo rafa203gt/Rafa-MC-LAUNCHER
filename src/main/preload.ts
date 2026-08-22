@@ -114,10 +114,7 @@ export const API = {
   setActiveAccount: (accountId: string) => ipcRenderer.invoke('auth:set-active-account', accountId),
   removeAccount: (accountId: string) => ipcRenderer.invoke('auth:remove-account', accountId),
   addOfflineAccount: (username: string) => ipcRenderer.invoke('auth:add-offline-account', username),
-  startMicrosoftLogin: () => ipcRenderer.invoke('auth:start-microsoft-login'),
-  pollMicrosoftLogin: (deviceCode: string, interval?: number, expiresIn?: number) =>
-    ipcRenderer.invoke('auth:poll-microsoft-login', deviceCode, interval, expiresIn),
-  cancelMicrosoftLogin: () => ipcRenderer.invoke('auth:cancel-microsoft-login')
+  loginMicrosoft: () => ipcRenderer.invoke('auth:login-microsoft')
 };
 
 contextBridge.exposeInMainWorld('launcherAPI', API);

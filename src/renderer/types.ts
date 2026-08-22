@@ -212,9 +212,7 @@ export interface LauncherAPI {
   setActiveAccount?: (accountId: string) => Promise<boolean>;
   removeAccount?: (accountId: string) => Promise<boolean>;
   addOfflineAccount?: (username: string) => Promise<UserAccount>;
-  startMicrosoftLogin?: () => Promise<DeviceCodeInfo>;
-  pollMicrosoftLogin?: (deviceCode: string, interval?: number, expiresIn?: number) => Promise<UserAccount>;
-  cancelMicrosoftLogin?: () => Promise<boolean>;
+  loginMicrosoft?: () => Promise<UserAccount>;
 }
 
 declare global {
