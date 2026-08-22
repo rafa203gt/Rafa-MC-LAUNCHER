@@ -110,13 +110,34 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  // Instant persistent username handler
+  const handleUsernameChange = useCallback((newName: string) => {
+    setUsername(newName);
+    setSettings((prev) => ({ ...prev, username: newName }));
+    try {
+      localStorage.setItem('rafa_mc_username', newName);
+    } catch {}
+    if (window.launcherAPI?.saveSettings) {
+      window.launcherAPI.saveSettings({ username: newName });
+    }
+  }, []);
+
   // Load initial settings & active instance & remote config & app version
   useEffect(() => {
     if (window.launcherAPI?.getSettings) {
       window.launcherAPI.getSettings().then((loaded) => {
         if (loaded) {
-          setSettings(loaded);
-          setUsername(loaded.username || 'Jugador');
+          let savedName = loaded.username;
+          try {
+            const localName = localStorage.getItem('rafa_mc_username');
+            if (localName && localName.trim()) {
+              savedName = localName.trim();
+            }
+          } catch {}
+
+          const effectiveName = savedName || 'Jugador';
+          setSettings({ ...loaded, username: effectiveName });
+          setUsername(effectiveName);
         }
       });
     }
@@ -365,7 +386,7 @@ export const App: React.FC = () => {
 
             <PlayControls
               username={username}
-              setUsername={setUsername}
+              setUsername={handleUsernameChange}
               maxRam={settings.maxRam}
               onRamChange={handleRamChange}
               activeInstance={activeInstance}

@@ -67,6 +67,10 @@ export const PlayControls: React.FC<PlayControlsProps> = ({
               value={username}
               disabled={isLaunching}
               onChange={(e) => setUsername(e.target.value)}
+              onBlur={(e) => {
+                const clean = e.target.value.trim() || 'Jugador';
+                setUsername(clean);
+              }}
               placeholder="Ingresa tu apodo..."
               maxLength={20}
               className="w-full bg-black/40 border border-mc-border focus:border-emerald-500 rounded-xl px-3 py-1.5 text-sm font-bold text-white placeholder-slate-500 focus:outline-none transition-all shadow-inner"
