@@ -114,6 +114,7 @@ export interface MinecraftInstance {
   totalMods?: number;
   isDefault?: boolean;
   isActive?: boolean;
+  isLocalOnly?: boolean;
   createdAt: string;
   lastPlayed?: string;
 }
