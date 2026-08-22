@@ -29,6 +29,10 @@ export class CosmeticsAgentManager {
   private readonly SUPABASE_URL = ENV.SUPABASE_URL;
   private readonly SUPABASE_KEY = ENV.SUPABASE_ANON_KEY;
 
+  // Bytecode Java precompilado (Java 8 - 21 compatible) para com.rafalauncher.cosmetics.RafaCosmeticsAgent
+  private readonly AGENT_CLASS_BASE64 =
+    'yv66vgAAADQAIAoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClWCQAIAAkHAAoMAAsADAEAEGphdmEvbGFuZy9TeXN0ZW0BAANvdXQBABVMamF2YS9pby9QcmludFN0cmVhbTsIAA4BAFFbUmFmYUxhdW5jaGVyXSDtoL7tur0gQWdlbnRlIGRlIENvc21ldGljb3MgM0QgeSBDYXBhcyBpbmljaWFsaXphZG8gY29ycmVjdGFtZW50ZS4KABAAEQcAEgwAEwAUAQATamF2YS9pby9QcmludFN0cmVhbQEAB3ByaW50bG4BABUoTGphdmEvbGFuZy9TdHJpbmc7KVYKABYAFwcAGAwAGQAaAQAtY29tL3JhZmFsYXVuY2hlci9jb3NtZXRpY3MvUmFmYUNvc21ldGljc0FnZW50AQAHcHJlbWFpbgEAOyhMamF2YS9sYW5nL1N0cmluZztMamF2YS9sYW5nL2luc3RydW1lbnQvSW5zdHJ1bWVudGF0aW9uOylWAQAEQ29kZQEAD0xpbmVOdW1iZXJUYWJsZQEACWFnZW50bWFpbgEAClNvdXJjZUZpbGUBABdSYWZhQ29zbWV0aWNzQWdlbnQuamF2YQAhABYAAgAAAAAAAwABAAUABgABABsAAAAdAAEAAQAAAAUqtwABsQAAAAEAHAAAAAYAAQAAAAUACQAZABoAAQAbAAAAJQACAAIAAAAJsgAHEg22AA+xAAAAAQAcAAAACgACAAAABwAIAAgACQAdABoAAQAbAAAAIgACAAIAAAAGKiu4ABWxAAAAAQAcAAAACgACAAAACgAFAAsAAQAeAAAAAgAf';
+
   /**
    * Asegura que el archivo rafa-cosmetics-core.jar exista en la carpeta bin del launcher.
    */
@@ -40,7 +44,7 @@ export class CosmeticsAgentManager {
 
     const agentJarPath = path.join(binDir, 'rafa-cosmetics-core.jar');
     
-    // Generar el archivo JAR del Agente con su Manifest si no existe o actualizarlo
+    // Generar el archivo JAR del Agente con su Manifest y Bytecode real
     const zip = new AdmZip();
 
     // 1. MANIFEST.MF con Premain-Class y Can-Redefine-Classes
@@ -57,7 +61,13 @@ export class CosmeticsAgentManager {
 
     zip.addFile('META-INF/MANIFEST.MF', Buffer.from(manifestContent, 'utf-8'));
 
-    // 2. Metadata del Agente y Configuración In-Game
+    // 2. Clase Java compilada para ejecución del -javaagent
+    zip.addFile(
+      'com/rafalauncher/cosmetics/RafaCosmeticsAgent.class',
+      Buffer.from(this.AGENT_CLASS_BASE64, 'base64')
+    );
+
+    // 3. Metadata del Agente y Configuración In-Game
     const agentConfig = {
       name: 'Rafa Cosmetics Core Agent',
       version: '1.0.27',
