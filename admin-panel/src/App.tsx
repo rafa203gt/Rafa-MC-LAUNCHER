@@ -35,6 +35,7 @@ import { InstancesManager } from './components/InstancesManager';
 import { ShadersManager } from './components/ShadersManager';
 import { CrashAnalytics } from './components/CrashAnalytics';
 import { LiveServerMonitor } from './components/LiveServerMonitor';
+import { CloudAssetManager } from './components/CloudAssetManager';
 
 export const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -46,8 +47,8 @@ export const App: React.FC = () => {
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<
-    'instances' | 'mods' | 'shaders' | 'config' | 'maintenance' | 'banner' | 'news' | 'crashes' | 'monitor'
-  >('instances');
+    'cloud_assets' | 'instances' | 'mods' | 'shaders' | 'config' | 'maintenance' | 'banner' | 'news' | 'crashes' | 'monitor'
+  >('cloud_assets');
   const [config, setConfig] = useState<LauncherConfig | null>(null);
   const [instances, setInstances] = useState<RemoteInstance[]>([]);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
@@ -370,6 +371,18 @@ export const App: React.FC = () => {
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-admin-border">
           <button
+            onClick={() => setActiveTab('cloud_assets')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
+              activeTab === 'cloud_assets'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-admin-card'
+            }`}
+          >
+            <Cloud className="w-4 h-4" />
+            Nube & Modpacks ZIP (Ilimitado)
+          </button>
+
+          <button
             onClick={() => setActiveTab('instances')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all ${
               activeTab === 'instances'
@@ -489,6 +502,10 @@ export const App: React.FC = () => {
         {/* Content Views */}
         {config ? (
           <div className="space-y-6">
+            {activeTab === 'cloud_assets' && (
+              <CloudAssetManager />
+            )}
+
             {activeTab === 'instances' && (
               <InstancesManager instances={instances} onRefresh={fetchData} />
             )}

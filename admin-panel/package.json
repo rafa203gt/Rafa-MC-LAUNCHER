@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "axios": "^1.7.9",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
