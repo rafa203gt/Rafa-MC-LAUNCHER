@@ -142,14 +142,37 @@ export const UsersAnalytics: React.FC<UsersAnalyticsProps> = ({ users, onRefresh
             </div>
           </div>
 
-          <button
-            onClick={onRefresh}
-            disabled={isLoading}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            Actualizar Lista
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                if (!confirm('¿Deseas limpiar y unificar registros de prueba y duplicados en la base de datos?')) return;
+                try {
+                  await supabase.from('launcher_users').delete().like('player_username', 'TestPlayer_%');
+                  await supabase.from('launcher_users').delete().like('player_username', 'Player_123-Pro%');
+                  await supabase.from('user_economy').delete().like('username', 'TestPlayer_%');
+                  await supabase.from('user_equipped_cosmetics').delete().like('username', 'TestEquipUser_%');
+                  alert('¡Base de datos limpiada y unificada con éxito!');
+                  onRefresh();
+                } catch (err: any) {
+                  alert(`Error limpiando: ${err.message}`);
+                }
+              }}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 active:scale-95 transition-all"
+              title="Limpiar registros de prueba"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-400" />
+              Limpiar Duplicados
+            </button>
+
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              Actualizar Lista
+            </button>
+          </div>
         </div>
 
         {/* 4 KPI Cards */}
