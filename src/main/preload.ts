@@ -68,6 +68,9 @@ export const API = {
   // Discord Rich Presence
   setDiscordRpcEnabled: (enabled: boolean) => ipcRenderer.invoke('discord-rpc:set-enabled', enabled),
 
+  // Hardware & Performance Diagnostic
+  getHardwareInfo: () => ipcRenderer.invoke('hardware:get-info'),
+
   // Event Listeners
   onProgress: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);

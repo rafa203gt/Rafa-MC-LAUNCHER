@@ -17,6 +17,20 @@ export interface AppSettings {
   height: number;
   jvmArgs: string[];
   discordRpc?: boolean;
+  jvmProfile?: 'auto' | 'aikar' | 'zgc' | 'low_end' | 'custom';
+}
+
+export interface SystemHardwareInfo {
+  cpuModel: string;
+  cpuCores: number;
+  cpuSpeedMhz: number;
+  totalRamGb: number;
+  freeRamGb: number;
+  gpus: string[];
+  dedicatedGpu?: string;
+  isHighEnd: boolean;
+  osPlatform: string;
+  osRelease: string;
 }
 
 export interface ServerStatusResult {
@@ -142,6 +156,7 @@ export interface LauncherAPI {
   checkForUpdates: () => Promise<AppUpdateInfo>;
   downloadAppUpdate: (downloadUrl: string, fileName: string) => Promise<void>;
   onUpdateProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void;
+  getHardwareInfo?: () => Promise<SystemHardwareInfo>;
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;

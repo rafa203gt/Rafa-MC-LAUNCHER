@@ -438,26 +438,28 @@ export class MinecraftLauncher {
         ];
       }
 
-      // Flags de Garbage Collection G1GC Ultra-Optimizado (Anti-Lag, Anti-Stutter para modpacks pesados)
-      const performanceGcArgs = [
-        '-XX:+UseG1GC',
-        '-XX:+ParallelRefProcEnabled',
-        '-XX:MaxGCPauseMillis=100',
-        '-XX:+UnlockExperimentalVMOptions',
-        '-XX:+DisableExplicitGC',
-        '-XX:+AlwaysPreTouch',
-        '-XX:G1NewSizePercent=30',
-        '-XX:G1MaxNewSizePercent=40',
-        '-XX:G1ReservePercent=20',
-        '-XX:G1HeapWastePercent=5',
-        '-XX:G1MixedGCCountTarget=4',
-        '-XX:InitiatingHeapOccupancyPercent=15',
-        '-XX:G1MixedGCLiveThresholdPercent=90',
-        '-XX:G1RSetUpdatingPauseTimePercent=5',
-        '-XX:SurvivorRatio=32',
-        '-XX:+PerfDisableSharedMem',
-        '-XX:MaxTenuringThreshold=1'
-      ];
+      // 6. Detección de Hardware y Optimización Inteligente de JVM y GPU
+      const { JVMOptimizer } = await import('./jvm-optimizer');
+      const { hardwareDetector } = await import('./hardware-detector');
+
+      const hwInfo = await hardwareDetector.getHardwareInfo();
+      onLog(`[Hardware] CPU: ${hwInfo.cpuModel} (${hwInfo.cpuCores} núcleos) | RAM Total: ${hwInfo.totalRamGb} GB (Libre: ${hwInfo.freeRamGb} GB)`);
+      if (hwInfo.dedicatedGpu) {
+        onLog(`[GPU] Aceleración de Alto Rendimiento activa en: ${hwInfo.dedicatedGpu}`);
+      }
+
+      // Inyectar variables de entorno de forzado de GPU dedicada
+      const gpuEnv = hardwareDetector.getGpuForceEnv();
+      Object.assign(process.env, gpuEnv);
+
+      // Flags de Garbage Collection y Rendimiento según el perfil configurado
+      const performanceGcArgs = JVMOptimizer.getOptimizedFlags(
+        (settings as any).jvmProfile || 'auto',
+        requiredJava,
+        Number(maxMemory) || 4096,
+        settings.jvmArgs || []
+      );
+      onLog(`[Optimizador] Perfil JVM aplicado: ${(settings as any).jvmProfile || 'auto'}`);
 
       // Flags obligatorios de acceso a módulos de Java 17/21 solo para NeoForge, Forge y Fabric
       const modLoaderModuleArgs =

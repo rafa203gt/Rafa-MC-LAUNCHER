@@ -83,6 +83,11 @@ export const ServerBanner: React.FC<ServerBannerProps> = ({
               </span>
             )}
 
+            <span className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+              <Zap className="w-3 h-3 text-amber-400" />
+              Aceleración GPU Activa
+            </span>
+
             <button
               onClick={onRefresh}
               disabled={isLoading}

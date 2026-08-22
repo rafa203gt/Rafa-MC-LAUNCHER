@@ -288,7 +288,13 @@ ipcMain.handle('discord-rpc:set-enabled', async (_event, enabled: boolean) => {
   return true;
 });
 
-// 9. Window Controls
+// 9. Hardware & Performance Diagnostic
+ipcMain.handle('hardware:get-info', async () => {
+  const { hardwareDetector } = await import('./hardware-detector');
+  return hardwareDetector.getHardwareInfo();
+});
+
+// 10. Window Controls
 ipcMain.handle('window:minimize', () => {
   if (mainWindow) mainWindow.minimize();
 });
