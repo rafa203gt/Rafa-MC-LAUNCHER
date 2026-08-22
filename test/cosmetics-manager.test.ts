@@ -43,4 +43,16 @@ describe('CosmeticsManager & Economy Unit Tests', () => {
     const unequipped = await cosmeticsMgr.equipCosmetic(testUser, 'wings', null);
     expect(unequipped.wings_id).toBeNull();
   });
+
+  it('debe mantener las monedas e inventario al cambiar de nickname en el mismo equipo', async () => {
+    const originalName = 'InitialPlayer_' + Date.now();
+    const eco1 = await cosmeticsMgr.getUserEconomy(originalName);
+    expect(eco1.coins).toBeGreaterThanOrEqual(500);
+
+    const changedName = 'RenamedPlayer_' + Date.now();
+    const eco2 = await cosmeticsMgr.getUserEconomy(changedName);
+    // El mismo equipo conserva su balance completo
+    expect(eco2.coins).toBe(eco1.coins);
+    expect(eco2.client_id).toBe(eco1.client_id);
+  });
 });
