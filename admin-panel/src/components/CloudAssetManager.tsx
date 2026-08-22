@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import JSZip from 'jszip';
+import { createExtractorFromData } from 'node-unrar-js';
 import {
   Upload,
   Cloud,
@@ -115,8 +116,10 @@ export const CloudAssetManager: React.FC = () => {
   const [mods, setMods] = useState<ModpackMod[]>([]);
   const [uploadStatus, setUploadStatus] = useState<{ [key: string]: { percent: number; status: string } }>({});
 
-  // Modpack .ZIP Extractor state
-  const [zipFiles, setZipFiles] = useState<{ name: string; path: string; size: number; file: JSZip.JSZipObject }[]>([]);
+  // Modpack .ZIP / .RAR Extractor state
+  const [zipFiles, setZipFiles] = useState<
+    { name: string; path: string; size: number; getData: () => Promise<ArrayBuffer> }[]
+  >([]);
   const [zipTotalSize, setZipTotalSize] = useState(0);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isBatchUploading, setIsBatchUploading] = useState(false);
@@ -411,10 +414,13 @@ export const CloudAssetManager: React.FC = () => {
     }
   };
 
-  // Process .ZIP Modpack drop
+  // Process .ZIP or .RAR Modpack drop
   const handleZipFileDrop = async (file: File) => {
-    if (!file.name.endsWith('.zip')) {
-      alert('Por favor, selecciona un archivo comprimido .ZIP válido.');
+    const isZip = file.name.toLowerCase().endsWith('.zip');
+    const isRar = file.name.toLowerCase().endsWith('.rar');
+
+    if (!isZip && !isRar) {
+      alert('Por favor, selecciona un archivo comprimido .ZIP o .RAR válido.');
       return;
     }
 
@@ -422,48 +428,94 @@ export const CloudAssetManager: React.FC = () => {
     setZipFiles([]);
 
     try {
-      const zip = new JSZip();
-      const zipData = await zip.loadAsync(file);
-      const extracted: { name: string; path: string; size: number; file: JSZip.JSZipObject }[] = [];
+      const extracted: { name: string; path: string; size: number; getData: () => Promise<ArrayBuffer> }[] = [];
       let totalBytes = 0;
 
-      for (const [relativePath, zipEntry] of Object.entries(zipData.files)) {
-        if (!zipEntry.dir) {
-          const isEligible =
-            relativePath.startsWith('mods/') ||
-            relativePath.startsWith('config/') ||
-            relativePath.startsWith('defaultconfigs/') ||
-            relativePath.startsWith('kubejs/') ||
-            relativePath.startsWith('shaderpacks/') ||
-            relativePath.endsWith('.jar') ||
-            relativePath.endsWith('.json') ||
-            relativePath.endsWith('.toml') ||
-            relativePath.endsWith('.snbt') ||
-            relativePath.endsWith('.cfg');
+      if (isZip) {
+        const zip = new JSZip();
+        const zipData = await zip.loadAsync(file);
 
-          if (isEligible) {
-            const fileName = relativePath.split('/').pop() || relativePath;
-            extracted.push({
-              name: fileName,
-              path: relativePath,
-              size: 50000,
-              file: zipEntry
-            });
-            totalBytes += 50000;
+        for (const [relativePath, zipEntry] of Object.entries(zipData.files)) {
+          if (!zipEntry.dir) {
+            const cleanPath = relativePath.replace(/\\/g, '/');
+            const isEligible =
+              cleanPath.startsWith('mods/') ||
+              cleanPath.startsWith('config/') ||
+              cleanPath.startsWith('defaultconfigs/') ||
+              cleanPath.startsWith('kubejs/') ||
+              cleanPath.startsWith('shaderpacks/') ||
+              cleanPath.endsWith('.jar') ||
+              cleanPath.endsWith('.json') ||
+              cleanPath.endsWith('.toml') ||
+              cleanPath.endsWith('.snbt') ||
+              cleanPath.endsWith('.cfg');
+
+            if (isEligible) {
+              const fileName = cleanPath.split('/').pop() || cleanPath;
+              extracted.push({
+                name: fileName,
+                path: cleanPath,
+                size: 50000,
+                getData: () => zipEntry.async('arraybuffer')
+              });
+              totalBytes += 50000;
+            }
+          }
+        }
+      } else if (isRar) {
+        const buffer = await file.arrayBuffer();
+        const extractor = await createExtractorFromData({ data: buffer });
+        const extractedArc = extractor.extract();
+        const files = [...extractedArc.files];
+
+        for (const f of files) {
+          if (!f.fileHeader.flags.directory && f.extraction) {
+            const cleanPath = f.fileHeader.name.replace(/\\/g, '/');
+            const isEligible =
+              cleanPath.startsWith('mods/') ||
+              cleanPath.startsWith('config/') ||
+              cleanPath.startsWith('defaultconfigs/') ||
+              cleanPath.startsWith('kubejs/') ||
+              cleanPath.startsWith('shaderpacks/') ||
+              cleanPath.endsWith('.jar') ||
+              cleanPath.endsWith('.json') ||
+              cleanPath.endsWith('.toml') ||
+              cleanPath.endsWith('.snbt') ||
+              cleanPath.endsWith('.cfg');
+
+            if (isEligible) {
+              const fileName = cleanPath.split('/').pop() || cleanPath;
+              const uint8 = f.extraction;
+              const fileBuffer = uint8.buffer.slice(
+                uint8.byteOffset,
+                uint8.byteOffset + uint8.byteLength
+              );
+              const fileSize = f.fileHeader.unpSize || fileBuffer.byteLength;
+              extracted.push({
+                name: fileName,
+                path: cleanPath,
+                size: fileSize,
+                getData: async () => fileBuffer
+              });
+              totalBytes += fileSize;
+            }
           }
         }
       }
 
       setZipFiles(extracted);
       setZipTotalSize(totalBytes);
+      if (extracted.length === 0) {
+        alert('No se encontraron archivos compatibles (mods, config, shaders, kubejs) dentro del archivo comprimido.');
+      }
     } catch (err: any) {
-      alert(`Error leyendo el archivo ZIP: ${err.message}`);
+      alert(`Error leyendo el archivo ${isRar ? 'RAR' : 'ZIP'}: ${err.message}`);
     } finally {
       setIsExtracting(false);
     }
   };
 
-  // Upload Extracted ZIP contents to GitHub CDN + Supabase
+  // Upload Extracted ZIP/RAR contents to GitHub CDN + Supabase
   const handleUploadZipContents = async () => {
     if (!zipFiles.length || !selectedInstance) return;
     setIsBatchUploading(true);
@@ -475,7 +527,7 @@ export const CloudAssetManager: React.FC = () => {
         const item = zipFiles[i];
         setBatchProgress({ current: i + 1, total: zipFiles.length, currentFile: item.name });
 
-        const arrayBuffer = await item.file.async('arraybuffer');
+        const arrayBuffer = await item.getData();
         const uploaded = await gitHubStorage.uploadAsset(
           { name: item.name, buffer: arrayBuffer },
           undefined,
@@ -1060,7 +1112,7 @@ export const CloudAssetManager: React.FC = () => {
             activeTab === 'modpack_zip' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
           }`}
         >
-          <FolderArchive className="w-4 h-4" /> Extractor .ZIP
+          <FolderArchive className="w-4 h-4" /> Extractor .ZIP / .RAR
         </button>
         <button
           onClick={() => setActiveTab('manifest')}
@@ -1567,21 +1619,27 @@ export const CloudAssetManager: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: EXTRACTOR .ZIP */}
+      {/* TAB 2: EXTRACTOR .ZIP / .RAR */}
       {activeTab === 'modpack_zip' && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
           <div className="bg-slate-950 border-2 border-dashed border-indigo-500/30 rounded-2xl p-8 text-center">
-            <input type="file" accept=".zip" id="zip-upload-input" className="hidden" onChange={(e) => e.target.files?.[0] && handleZipFileDrop(e.target.files[0])} />
+            <input
+              type="file"
+              accept=".zip,.rar,application/zip,application/x-zip-compressed,application/x-rar-compressed,application/vnd.rar"
+              id="zip-upload-input"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleZipFileDrop(e.target.files[0])}
+            />
             <label htmlFor="zip-upload-input" className="cursor-pointer flex flex-col items-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
                 <FolderArchive className="w-8 h-8" />
               </div>
-              <h4 className="text-base font-bold text-white">Arrastra o selecciona un archivo Modpack.zip</h4>
+              <h4 className="text-base font-bold text-white">Arrastra o selecciona un archivo .ZIP o .RAR</h4>
               <p className="text-xs text-slate-400 max-w-md">
-                El panel extraerá y clasificará automáticamente los mods (`mods/`), configs (`config/`) y shaders (`shaderpacks/`) para subirlos a la instancia "{selectedInstance?.name}".
+                El panel extraerá y clasificará automáticamente los mods (`mods/`), configs (`config/`), kubejs (`kubejs/`) y shaders (`shaderpacks/`) para subirlos a la instancia "{selectedInstance?.name}".
               </p>
               <span className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md">
-                Cargar Archivo .ZIP
+                Cargar Archivo .ZIP / .RAR
               </span>
             </label>
           </div>
