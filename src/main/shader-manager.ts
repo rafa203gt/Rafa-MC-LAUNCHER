@@ -38,58 +38,58 @@ export class ShaderManager {
   }
 
   public async getAvailableShaders(instanceId?: string): Promise<ShaderInfo[]> {
-    const installed = this.getInstalledShaders(instanceId);
+    const targetInstance = instanceId || 'atm10';
+    const installed = this.getInstalledShaders(targetInstance);
     let remoteShaders: any[] = [];
 
     try {
       if ((remoteConfigManager as any).supabase) {
-        const { data } = await (remoteConfigManager as any).supabase
+        // 1. Fetch shaders registered in modpack_mods for this specific instance
+        const { data: modsData } = await (remoteConfigManager as any).supabase
+          .from('modpack_mods')
+          .select('*')
+          .eq('instance_id', targetInstance)
+          .eq('is_enabled', true);
+
+        if (modsData && modsData.length > 0) {
+          const shadersFromMods = modsData.filter(
+            (m: any) =>
+              m.category === 'shaders' ||
+              m.category === 'shader' ||
+              m.file_path?.startsWith('shaderpacks/') ||
+              (m.file_name?.endsWith('.zip') && !m.file_path?.startsWith('mods/'))
+          );
+          if (shadersFromMods.length > 0) {
+            remoteShaders = shadersFromMods.map((s: any) => ({
+              id: s.id,
+              name: s.mod_name || s.file_name.replace(/\.zip$/i, ''),
+              description: `Shaderpack optimizado para ${targetInstance}`,
+              performance_tier: 'balanced',
+              download_url: s.download_url,
+              file_name: s.file_name,
+              file_size: Number(s.file_size) || 0,
+              is_active: s.is_enabled
+            }));
+          }
+        }
+
+        // 2. Also fetch from shaderpacks table strictly for this instance_id
+        const { data: tableData } = await (remoteConfigManager as any).supabase
           .from('shaderpacks')
           .select('*')
+          .eq('instance_id', targetInstance)
           .eq('is_active', true);
-        if (data) remoteShaders = data;
-      }
-    } catch {
-      // Fallback
-    }
 
-    if (remoteShaders.length === 0) {
-      // Hardcoded defaults if offline
-      remoteShaders = [
-        {
-          id: 'complementary-reimagined',
-          name: 'Complementary Reimagined',
-          description: 'El shader más equilibrado y optimizado con agua y luz realista.',
-          performance_tier: 'balanced',
-          download_url:
-            'https://github.com/rafa203gt/Rafa-MC-LAUNCHER/releases/download/v1.0.0/ComplementaryReimagined_r5.4.zip',
-          file_name: 'ComplementaryReimagined_r5.4.zip',
-          file_size: 5242880,
-          preview_image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80'
-        },
-        {
-          id: 'bsl-shaders',
-          name: 'BSL Shaders v8.2',
-          description: 'Sombras atmosféricas y gráficos cálidos con alto rendimiento.',
-          performance_tier: 'balanced',
-          download_url:
-            'https://github.com/rafa203gt/Rafa-MC-LAUNCHER/releases/download/v1.0.0/BSL_v8.2.09.zip',
-          file_name: 'BSL_v8.2.09.zip',
-          file_size: 3145728,
-          preview_image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80'
-        },
-        {
-          id: 'makeup-ultrafast',
-          name: 'MakeUp - Ultra Fast',
-          description: 'Máximos FPS para portátiles y tarjetas integradas.',
-          performance_tier: 'fast',
-          download_url:
-            'https://github.com/rafa203gt/Rafa-MC-LAUNCHER/releases/download/v1.0.0/MakeUp-UltraFast-9.0.zip',
-          file_name: 'MakeUp-UltraFast-9.0.zip',
-          file_size: 1048576,
-          preview_image: 'https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?w=800&auto=format&fit=crop&q=80'
+        if (tableData && tableData.length > 0) {
+          tableData.forEach((st: any) => {
+            if (!remoteShaders.some((r) => r.file_name === st.file_name)) {
+              remoteShaders.push(st);
+            }
+          });
         }
-      ];
+      }
+    } catch (err: any) {
+      console.warn(`[ShaderManager] Error cargando shaders para ${targetInstance}:`, err.message);
     }
 
     return remoteShaders.map((s) => ({

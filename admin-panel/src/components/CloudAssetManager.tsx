@@ -221,12 +221,17 @@ export const CloudAssetManager: React.FC = () => {
           is_active: s.is_enabled
         }));
 
-        // Merge with global shaderpacks from table if appropriate
-        const { data: shaderTableData } = await supabase.from('shaderpacks').select('*').order('name', { ascending: true });
+        // Query shaderpacks strictly belonging to this specific instance
+        const { data: shaderTableData } = await supabase
+          .from('shaderpacks')
+          .select('*')
+          .eq('instance_id', instanceId)
+          .order('name', { ascending: true });
+
         const mergedShaders = [...instanceShaders];
         if (shaderTableData) {
           shaderTableData.forEach((st) => {
-            if (!mergedShaders.some((s) => s.name === st.name || s.file_name === st.file_name)) {
+            if (!mergedShaders.some((s) => s.file_name === st.file_name)) {
               mergedShaders.push(st);
             }
           });
