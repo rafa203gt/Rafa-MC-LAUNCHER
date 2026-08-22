@@ -251,7 +251,11 @@ export class ModSynchronizer {
       return { synced: 0, deleted: 0, total: 0 };
     }
 
-    const remoteFiles = manifest.files;
+    // Filter only valid downloadable files (must have a non-empty path and downloadUrl)
+    const remoteFiles = manifest.files.filter(
+      (f) => f && typeof f.path === 'string' && typeof f.downloadUrl === 'string' && f.downloadUrl.trim().startsWith('http')
+    );
+
     const toDownload: ModpackFile[] = [];
 
     for (const file of remoteFiles) {
@@ -267,6 +271,7 @@ export class ModSynchronizer {
     }
 
     let downloadedCount = 0;
+    let processedCount = 0;
     const totalToDownload = toDownload.length;
 
     if (totalToDownload > 0) {
@@ -288,16 +293,18 @@ export class ModSynchronizer {
             await this.downloadFile(file.downloadUrl, targetPath);
             downloadedCount++;
           } catch (err: any) {
-            console.warn(`[ModSync] Aviso: No se pudo descargar ${file.path} (${err.message}).`);
+            console.warn(`[ModSync] Aviso: No se pudo descargar ${file.path} (${err.message}). Saltando...`);
+          } finally {
+            processedCount++;
           }
 
           if (onProgress) {
-            const percent = Math.round((downloadedCount / totalToDownload) * 100);
+            const percent = Math.min(100, Math.round((processedCount / totalToDownload) * 100));
             onProgress({
               stage: 'mods',
-              task: `⚡ Actualizando (${downloadedCount}/${totalToDownload}): ${path.basename(file.path)}`,
+              task: `⚡ Actualizando (${processedCount}/${totalToDownload}): ${path.basename(file.path)}`,
               total: totalToDownload,
-              current: downloadedCount,
+              current: processedCount,
               percent
             });
           }
@@ -503,36 +510,32 @@ export class ModSynchronizer {
     });
   }
 
-  private downloadFile(url: string, dest: string): Promise<void> {
+  private async downloadFile(url: string, dest: string): Promise<void> {
+    if (!url || !url.startsWith('http')) {
+      throw new Error(`URL de descarga inválida: ${url}`);
+    }
+
+    const response = await axios.get(url, {
+      responseType: 'stream',
+      timeout: 10000,
+      headers: { 'User-Agent': 'Rafa-MC-Launcher' }
+    });
+
     return new Promise((resolve, reject) => {
-      const isHttps = url.startsWith('https');
-      const client = isHttps ? https : http;
-      const agent = isHttps ? httpsAgent : httpAgent;
+      const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
+      response.data.pipe(file);
 
-      client
-        .get(url, { agent, headers: { 'User-Agent': 'Rafa-MC-Launcher' } }, (res) => {
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            return this.downloadFile(res.headers.location, dest).then(resolve).catch(reject);
-          }
+      file.on('finish', () => {
+        file.close(() => resolve());
+      });
 
-          if (res.statusCode !== 200) {
-            return reject(new Error(`Error descargando ${url}: HTTP ${res.statusCode}`));
-          }
+      file.on('error', (err) => {
+        fs.unlink(dest, () => reject(err));
+      });
 
-          const file = fs.createWriteStream(dest, { highWaterMark: 4 * 1024 * 1024 });
-          res.pipe(file);
-
-          file.on('finish', () => {
-            file.close(() => resolve());
-          });
-
-          file.on('error', (err) => {
-            fs.unlink(dest, () => reject(err));
-          });
-        })
-        .on('error', (err) => {
-          reject(err);
-        });
+      response.data.on('error', (err: any) => {
+        fs.unlink(dest, () => reject(err));
+      });
     });
   }
 
