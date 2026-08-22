@@ -1,17 +1,21 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.rafa.mclauncher",
-  "productName": "Rafa-MC-LAUNCHER",
+  "appId": "com.rafa.launcher",
+  "productName": "Rafa Launcher",
   "directories": {
-    "output": "release"
+    "output": "release",
+    "buildResources": "build"
   },
   "files": [
     "dist",
     "dist-electron",
-    "default-config.json"
+    "default-config.json",
+    "build/**/*"
   ],
   "forceCodeSigning": false,
   "win": {
+    "icon": "build/icon.ico",
+    "executableName": "Rafa Launcher",
     "target": [
       {
         "target": "nsis",
@@ -33,6 +37,6 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Rafa-MC-LAUNCHER"
+    "shortcutName": "Rafa Launcher"
   }
 }

@@ -10,10 +10,16 @@ export class TrayManager {
     this.mainWindow = mainWindow;
 
     // Create a 16x16 / 32x32 transparent or icon buffer for system tray
-    const iconPath = path.join(app.getAppPath(), 'public', 'favicon.ico');
+    const possiblePaths = [
+      path.join(app.getAppPath(), 'public', 'favicon.ico'),
+      path.join(app.getAppPath(), 'build', 'icon.ico'),
+      path.join(app.getAppPath(), 'public', 'icon.png'),
+      path.join(app.getAppPath(), 'build', 'icon.png')
+    ];
+    const iconPath = possiblePaths.find((p) => fs.existsSync(p)) || '';
     let trayIcon: Electron.NativeImage;
 
-    if (fs.existsSync(iconPath)) {
+    if (iconPath) {
       trayIcon = nativeImage.createFromPath(iconPath);
     } else {
       // Fallback 16x16 bitmap icon
@@ -27,7 +33,7 @@ export class TrayManager {
 
     try {
       this.tray = new Tray(trayIcon);
-      this.tray.setToolTip('Rafa MC Launcher');
+      this.tray.setToolTip('Rafa Launcher');
 
       this.updateContextMenu('Listo para jugar');
 

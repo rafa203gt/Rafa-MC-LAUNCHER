@@ -20,6 +20,9 @@ process.on('unhandledRejection', (reason) => {
   console.error('[CRITICAL] Unhandled promise rejection:', reason);
 });
 
+// Set process and application name for Task Manager and OS
+app.setName('Rafa Launcher');
+
 // Hardware Acceleration & High-Performance Flags
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -39,9 +42,18 @@ const url = process.env.VITE_DEV_SERVER_URL;
 const indexHtml = path.join(process.env.DIST, 'index.html');
 
 function createWindow() {
+  const possibleIconPaths = [
+    path.join(process.env.VITE_PUBLIC || '', 'icon.png'),
+    path.join(process.env.VITE_PUBLIC || '', 'favicon.ico'),
+    path.join(appPath, 'build/icon.png'),
+    path.join(__dirname, '../build/icon.png'),
+    path.join(__dirname, '../../build/icon.png')
+  ];
+  const appIcon = possibleIconPaths.find((p) => fs.existsSync(p)) || '';
+
   mainWindow = new BrowserWindow({
-    title: 'Rafa-MC-LAUNCHER',
-    icon: path.join(process.env.VITE_PUBLIC || '', 'favicon.ico'),
+    title: 'Rafa Launcher',
+    icon: appIcon || undefined,
     width: 1150,
     height: 720,
     minWidth: 1000,

@@ -1,7 +1,8 @@
 {
   "name": "rafa-mc-launcher",
+  "productName": "Rafa Launcher",
   "version": "1.0.27",
-  "description": "Custom Minecraft Launcher with Auto-Modpack Sync and No-Premium support",
+  "description": "Rafa Launcher - Launcher oficial optimizado para Minecraft con sincronización automática",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {

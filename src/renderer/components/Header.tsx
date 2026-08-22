@@ -32,9 +32,14 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="h-14 bg-mc-card/80 backdrop-blur-md border-b border-mc-border flex items-center justify-between px-4 titlebar-drag-region sticky top-0 z-50">
       {/* Brand & Logo */}
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-glow">
-          <Gamepad2 className="w-5 h-5 text-white" />
-        </div>
+        <img
+          src="/icon.png"
+          alt="Rafa Launcher"
+          className="w-8 h-8 rounded-lg shadow-glow object-cover border border-emerald-500/30"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+        />
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-bold text-sm tracking-wider text-slate-100 uppercase">Rafa Launcher</h1>
