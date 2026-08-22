@@ -35,12 +35,12 @@ describe('CosmeticsManager & Economy Unit Tests', () => {
     expect(equipped).toBeDefined();
     expect(equipped.username).toBe(testUser);
 
-    // Equipar capa
-    const updated = await cosmeticsMgr.equipCosmetic(testUser, 'cape', 'cape-rafa-champions');
-    expect(updated.cape_id).toBe('cape-rafa-champions');
+    // Equipar alas activas
+    const updated = await cosmeticsMgr.equipCosmetic(testUser, 'wings', 'wings-fallen-angel-void');
+    expect(updated.wings_id).toBe('wings-fallen-angel-void');
 
-    // Desequipar capa
-    const unequipped = await cosmeticsMgr.equipCosmetic(testUser, 'cape', null);
-    expect(unequipped.cape_id).toBeNull();
+    // Desequipar alas
+    const unequipped = await cosmeticsMgr.equipCosmetic(testUser, 'wings', null);
+    expect(unequipped.wings_id).toBeNull();
   });
 });
