@@ -160,29 +160,51 @@ export class MinecraftLauncher {
       }
     }
 
-    // 3. Download and run installer if patched client jar is not ready
-    if (!fs.existsSync(patchedClientJar)) {
+    // 3. Download and run installer if patched client jar or version json is missing
+    if (!fs.existsSync(patchedClientJar) || !fs.existsSync(versionJsonPath)) {
       const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${neoForgeVersion}/neoforge-${neoForgeVersion}-installer.jar`;
       const tempInstaller = path.join(instanceDir, `installer-${neoForgeVersion}.jar`);
 
-      if (onLog) onLog(`[Launcher] Descargando instalador de NeoForge ${neoForgeVersion}...`);
+      if (!fs.existsSync(tempInstaller)) {
+        if (onLog) onLog(`[Launcher] Descargando instalador de NeoForge ${neoForgeVersion}...`);
 
-      let tracker: ProgressTracker | null = null;
-      await this.downloadFastStream(installerUrl, tempInstaller, (loaded, total) => {
-        if (!tracker && total > 0) tracker = new ProgressTracker(total);
-        if (onProgress && tracker) {
-          const metrics = tracker.update(loaded);
-          onProgress({
-            stage: 'assets',
-            task: `⚡ Descargando instalador NeoForge ${neoForgeVersion}: ${metrics.loadedMB} / ${metrics.totalMB} MB — ${metrics.speedMBs} MB/s (${metrics.etaFormatted})`,
-            total,
-            current: loaded,
-            percent: metrics.percent
-          });
+        let tracker: ProgressTracker | null = null;
+        await this.downloadFastStream(installerUrl, tempInstaller, (loaded, total) => {
+          if (!tracker && total > 0) tracker = new ProgressTracker(total);
+          if (onProgress && tracker) {
+            const metrics = tracker.update(loaded);
+            onProgress({
+              stage: 'assets',
+              task: `⚡ Descargando instalador NeoForge ${neoForgeVersion}: ${metrics.loadedMB} / ${metrics.totalMB} MB — ${metrics.speedMBs} MB/s (${metrics.etaFormatted})`,
+              total,
+              current: loaded,
+              percent: metrics.percent
+            });
+          }
+        });
+      }
+
+      // Extraer directamente el archivo version.json del installer jar si hace falta
+      if (!fs.existsSync(versionJsonPath) && fs.existsSync(tempInstaller)) {
+        try {
+          const AdmZip = (await import('adm-zip')).default;
+          const zip = new AdmZip(tempInstaller);
+          const versionEntry = zip.getEntry('version.json');
+          if (versionEntry) {
+            const versionContent = zip.readAsText(versionEntry);
+            const parsed = JSON.parse(versionContent);
+            parsed.id = versionId;
+            if (!fs.existsSync(versionDir)) fs.mkdirSync(versionDir, { recursive: true });
+            fs.writeFileSync(versionJsonPath, JSON.stringify(parsed, null, 2), 'utf-8');
+            if (onLog) onLog(`[Launcher] Manifiesto ${versionId}.json generado correctamente.`);
+          }
+        } catch (err: any) {
+          if (onLog) onLog(`[Launcher] Nota extrayendo version.json: ${err.message}`);
         }
-      });
+      }
 
-      if (javaPath && fs.existsSync(javaPath)) {
+      // Si aún no existe el cliente parchado, ejecutar el installer oficial de NeoForge
+      if (!fs.existsSync(patchedClientJar) && javaPath && fs.existsSync(javaPath) && fs.existsSync(tempInstaller)) {
         if (onLog) onLog(`[Launcher] Ejecutando parchador binario oficial de NeoForge...`);
         if (onProgress) {
           onProgress({
@@ -200,13 +222,33 @@ export class MinecraftLauncher {
           });
           proc.on('close', (code: number | null) => {
             try {
-              fs.unlinkSync(tempInstaller);
+              if (fs.existsSync(tempInstaller)) fs.unlinkSync(tempInstaller);
             } catch {}
             if (code === 0) resolve();
-            else reject(new Error(`NeoForge installer falló con código: ${code}`));
+            else reject(new Error(`NeoForge installer finalizó con código: ${code}`));
           });
           proc.on('error', reject);
         });
+      }
+
+      // Limpieza final de temp installer si quedó
+      try {
+        if (fs.existsSync(tempInstaller)) fs.unlinkSync(tempInstaller);
+      } catch {}
+    }
+
+    // Verificación final de seguridad: Si por alguna razón el archivo JSON no está en versionJsonPath, buscarlo en versions/
+    if (!fs.existsSync(versionJsonPath)) {
+      const versionsBase = path.join(instanceDir, 'versions');
+      if (fs.existsSync(versionsBase)) {
+        const found = fs.readdirSync(versionsBase).find((d) => d.includes(neoForgeVersion));
+        if (found) {
+          const candidate = path.join(versionsBase, found, `${found}.json`);
+          if (fs.existsSync(candidate)) {
+            if (!fs.existsSync(versionDir)) fs.mkdirSync(versionDir, { recursive: true });
+            fs.copyFileSync(candidate, versionJsonPath);
+          }
+        }
       }
     }
 

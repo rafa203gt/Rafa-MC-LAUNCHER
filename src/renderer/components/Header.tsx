@@ -6,9 +6,16 @@ interface HeaderProps {
   setActiveTab: (tab: 'play' | 'instances' | 'skins' | 'mods' | 'settings' | 'console') => void;
   statusText: string;
   activeInstanceName?: string;
+  appVersion?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusText, activeInstanceName }) => {
+export const Header: React.FC<HeaderProps> = ({
+  activeTab,
+  setActiveTab,
+  statusText,
+  activeInstanceName,
+  appVersion = '1.0.20'
+}) => {
   const handleMinimize = () => {
     window.launcherAPI?.minimizeWindow();
   };
@@ -29,7 +36,12 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, statusT
           <Gamepad2 className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h1 className="font-bold text-sm tracking-wider text-slate-100 uppercase">Rafa Launcher</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-bold text-sm tracking-wider text-slate-100 uppercase">Rafa Launcher</h1>
+            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-mono font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">
+              v{appVersion}
+            </span>
+          </div>
           <span className="text-[10px] text-emerald-400 font-medium tracking-tight">
             {activeInstanceName || 'All the Mods 10 (ATM10)'}
           </span>

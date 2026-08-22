@@ -93,7 +93,11 @@ app.on('window-all-closed', () => {
 
 // IPC HANDLERS
 
-// 1. Settings
+// 1. App Info & Settings
+ipcMain.handle('app:version', () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('settings:get', async () => {
   return configStore.getSettings();
 });

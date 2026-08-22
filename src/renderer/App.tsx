@@ -27,6 +27,7 @@ export const App: React.FC = () => {
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
+  const [appVersion, setAppVersion] = useState('1.0.20');
   const [isShadersOpen, setIsShadersOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     username: 'Jugador',
@@ -105,7 +106,7 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Load initial settings & active instance & remote config
+  // Load initial settings & active instance & remote config & app version
   useEffect(() => {
     if (window.launcherAPI?.getSettings) {
       window.launcherAPI.getSettings().then((loaded) => {
@@ -113,6 +114,12 @@ export const App: React.FC = () => {
           setSettings(loaded);
           setUsername(loaded.username || 'Jugador');
         }
+      });
+    }
+
+    if (window.launcherAPI?.getAppVersion) {
+      window.launcherAPI.getAppVersion().then((ver) => {
+        if (ver) setAppVersion(ver);
       });
     }
 
@@ -283,13 +290,14 @@ export const App: React.FC = () => {
   const isModded = activeInstance?.modLoader !== 'vanilla';
 
   return (
-    <div className="flex flex-col h-screen bg-mc-darker text-slate-100 overflow-hidden">
+    <div className="flex flex-col h-screen bg-mc-darker text-slate-100 overflow-hidden relative">
       {/* Custom Titlebar */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         statusText={isLaunching ? 'Lanzando juego...' : 'Listo'}
         activeInstanceName={activeInstance?.name}
+        appVersion={appVersion}
       />
 
       {/* App Auto-Update Notification */}
@@ -377,6 +385,12 @@ export const App: React.FC = () => {
           <ConsoleModal logs={logs} onClear={() => setLogs([])} />
         )}
       </main>
+
+      {/* Floating Bottom-Right Version & Build Status */}
+      <div className="fixed bottom-2.5 right-3.5 z-40 flex items-center gap-1.5 bg-mc-card/85 backdrop-blur-md border border-mc-border/70 px-2.5 py-1 rounded-full text-[10px] text-slate-400 shadow-xl pointer-events-none select-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="font-mono font-bold text-slate-300">v{appVersion}</span>
+      </div>
 
       {/* 1-Click Shaders Modal */}
       <ShadersModal

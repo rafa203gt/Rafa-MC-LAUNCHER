@@ -137,6 +137,7 @@ export interface NewsAnnouncement {
 
 export interface LauncherAPI {
   launchGame: (options: { username: string; minRam?: number; maxRam?: number; autoConnect?: boolean }) => Promise<void>;
+  getAppVersion?: () => Promise<string>;
   getSettings: () => Promise<AppSettings>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
   getServerStatus: () => Promise<ServerStatusResult>;

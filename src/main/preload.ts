@@ -5,7 +5,8 @@ export const API = {
   launchGame: (options: { username: string; minRam?: number; maxRam?: number; autoConnect?: boolean }) =>
     ipcRenderer.invoke('launcher:launch', options),
   
-  // Settings
+  // App Info & Settings
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings: any) => ipcRenderer.invoke('settings:save', settings),
 
