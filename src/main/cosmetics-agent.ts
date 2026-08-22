@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import AdmZip from 'adm-zip';
 import axios from 'axios';
 import { configStore } from './config-store';
+import { ENV } from './env';
 
 export interface InGameCosmeticItem {
   id: string;
@@ -25,9 +26,8 @@ export interface PlayerEquippedMap {
 }
 
 export class CosmeticsAgentManager {
-  private readonly SUPABASE_URL = 'https://wukhkwwstsfvqcnyqoqu.supabase.co';
-  private readonly SUPABASE_KEY =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1a2hrd3dzdHNmdnFjbnlxb3F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNDk5NDUsImV4cCI6MjEwMjkyNTk0NX0.2NfFdLXOH4LHNJyAAqAeeUxtWsGnt6mcrT1VhQ22qzg';
+  private readonly SUPABASE_URL = ENV.SUPABASE_URL;
+  private readonly SUPABASE_KEY = ENV.SUPABASE_ANON_KEY;
 
   /**
    * Asegura que el archivo rafa-cosmetics-core.jar exista en la carpeta bin del launcher.

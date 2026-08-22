@@ -5,6 +5,7 @@ import http from 'node:http';
 import axios from 'axios';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { configStore } from './config-store';
+import { ENV } from './env';
 
 export interface UserSkinData {
   username: string;
@@ -24,12 +25,13 @@ export class SkinManager {
   }
 
   private initSupabase() {
-    const supabaseUrl = 'https://wukhkwwstsfvqcnyqoqu.supabase.co';
-    const supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1a2hrd3dzdHNmdnFjbnlxb3F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAwNjE2NDcsImV4cCI6MjA1NTYzNzY0N30.i9w1N3v_Q4Wk1g5Lh-b6o_f7_Ew6U5Q6a8K2y8z8x8';
+    const supabaseUrl = ENV.SUPABASE_URL;
+    const supabaseAnonKey = ENV.SUPABASE_ANON_KEY;
 
     try {
-      this.supabase = createClient(supabaseUrl, supabaseAnonKey);
+      if (supabaseUrl && supabaseAnonKey) {
+        this.supabase = createClient(supabaseUrl, supabaseAnonKey);
+      }
     } catch (err) {
       console.warn('[SkinManager] No se pudo inicializar cliente de Supabase:', err);
     }
