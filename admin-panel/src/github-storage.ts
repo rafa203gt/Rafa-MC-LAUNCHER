@@ -54,7 +54,7 @@ export class GitHubStorageService {
   }
 
   // Get or Create the dedicated assets release
-  public async getOrCreateRelease(): Promise<{ id: number; upload_url: string }> {
+  public async getOrCreateRelease(tag: string = this.releaseTag, releaseTitle?: string): Promise<{ id: number; upload_url: string }> {
     const token = this.getToken();
     if (!token) {
       throw new Error('Se requiere un Token Personal de GitHub (PAT) para subir archivos.');
@@ -65,7 +65,7 @@ export class GitHubStorageService {
     try {
       // 1. Check if release already exists
       const res = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}/releases/tags/${this.releaseTag}`,
+        `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`,
         {
           headers: {
             Authorization: `token ${token}`,
@@ -80,8 +80,8 @@ export class GitHubStorageService {
         const createRes = await axios.post(
           `https://api.github.com/repos/${owner}/${repo}/releases`,
           {
-            tag_name: this.releaseTag,
-            name: '📦 Modpack & Launcher Cloud Assets',
+            tag_name: tag,
+            name: releaseTitle || `📦 ${tag} - Cloud Modpack Assets`,
             body: 'Almacenamiento en la nube de alta velocidad con CDN ilimitado para mods, shaders, configs y paquetes de recursos.',
             draft: false,
             prerelease: false
@@ -102,7 +102,8 @@ export class GitHubStorageService {
   // Upload an asset to GitHub Release
   public async uploadAsset(
     file: File | { name: string; buffer: ArrayBuffer },
-    onProgress?: UploadProgressCallback
+    onProgress?: UploadProgressCallback,
+    tag: string = this.releaseTag
   ): Promise<{ name: string; url: string; size: number; sha1: string }> {
     const token = this.getToken();
     if (!token) throw new Error('Token de GitHub no configurado');
@@ -115,7 +116,7 @@ export class GitHubStorageService {
     const sha1 = await this.calculateSha1(buffer);
 
     if (onProgress) onProgress(fileName, 25, 'Conectando con GitHub Releases...');
-    const { upload_url } = await this.getOrCreateRelease();
+    const { upload_url } = await this.getOrCreateRelease(tag);
 
     // Clean upload_url template: https://uploads.github.com/.../assets{?name,label}
     const cleanUploadUrl = upload_url.split('{')[0] + `?name=${encodeURIComponent(fileName)}`;
@@ -123,7 +124,7 @@ export class GitHubStorageService {
     if (onProgress) onProgress(fileName, 40, 'Subiendo a la red CDN de GitHub...');
 
     // If asset with same name already exists in release, delete it first to overwrite
-    await this.deleteAssetIfExists(fileName);
+    await this.deleteAssetIfExists(fileName, tag);
 
     const uploadRes = await axios.post(cleanUploadUrl, buffer, {
       headers: {
@@ -149,14 +150,14 @@ export class GitHubStorageService {
   }
 
   // List existing assets in the release
-  public async listAssets(): Promise<GitHubAsset[]> {
+  public async listAssets(tag: string = this.releaseTag): Promise<GitHubAsset[]> {
     const token = this.getToken();
     if (!token) return [];
 
     const [owner, repo] = this.getRepo().split('/');
     try {
       const res = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}/releases/tags/${this.releaseTag}`,
+        `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`,
         {
           headers: {
             Authorization: `token ${token}`,
@@ -178,11 +179,11 @@ export class GitHubStorageService {
   }
 
   // Delete an asset by name if it already exists
-  public async deleteAssetIfExists(fileName: string): Promise<boolean> {
+  public async deleteAssetIfExists(fileName: string, tag: string = this.releaseTag): Promise<boolean> {
     const token = this.getToken();
     if (!token) return false;
 
-    const assets = await this.listAssets();
+    const assets = await this.listAssets(tag);
     const existing = assets.find((a) => a.name.toLowerCase() === fileName.toLowerCase());
     if (!existing) return false;
 
