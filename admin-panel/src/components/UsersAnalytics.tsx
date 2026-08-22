@@ -56,7 +56,8 @@ export const UsersAnalytics: React.FC<UsersAnalyticsProps> = ({ users, onRefresh
         u.player_username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.os_platform?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.last_instance_played?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.client_id?.toLowerCase().includes(searchTerm.toLowerCase());
+        u.client_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.ip_address?.toLowerCase().includes(searchTerm.toLowerCase());
 
       if (!matchesSearch) return false;
 
@@ -244,6 +245,7 @@ export const UsersAnalytics: React.FC<UsersAnalyticsProps> = ({ users, onRefresh
               <tr>
                 <th className="px-6 py-4">Equipo / Dispositivo</th>
                 <th className="px-6 py-4">Usuario Minecraft</th>
+                <th className="px-6 py-4">Dirección IP</th>
                 <th className="px-6 py-4">Sistema & RAM</th>
                 <th className="px-6 py-4">Versión</th>
                 <th className="px-6 py-4">Último Modpack</th>
@@ -255,7 +257,7 @@ export const UsersAnalytics: React.FC<UsersAnalyticsProps> = ({ users, onRefresh
             <tbody className="divide-y divide-slate-800/60">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-16 text-center text-slate-500">
+                  <td colSpan={9} className="px-6 py-16 text-center text-slate-500">
                     <Users className="w-12 h-12 text-slate-600 mx-auto mb-3 opacity-60" />
                     <p className="text-sm font-bold text-slate-400">No se encontraron registros de usuarios</p>
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
@@ -306,6 +308,26 @@ export const UsersAnalytics: React.FC<UsersAnalyticsProps> = ({ users, onRefresh
                         <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-bold font-mono">
                           {user.player_username || 'Jugador'}
                         </span>
+                      </td>
+
+                      {/* IP Address */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 w-fit">
+                          <span>{user.ip_address || 'Desconocida'}</span>
+                          {user.ip_address && user.ip_address !== 'Desconocida' && (
+                            <button
+                              onClick={() => handleCopyId(user.ip_address!)}
+                              className="text-emerald-400/60 hover:text-emerald-300 transition-colors"
+                              title="Copiar IP pública"
+                            >
+                              {copiedId === user.ip_address ? (
+                                <Check className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* OS & RAM */}

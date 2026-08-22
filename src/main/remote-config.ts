@@ -300,6 +300,25 @@ export class RemoteConfigManager {
     }
   }
 
+  private async getPublicIp(): Promise<string> {
+    try {
+      const axios = (await import('axios')).default;
+      const res = await axios.get('https://api.ipify.org?format=json', { timeout: 2500 });
+      if (res.data && res.data.ip) {
+        return String(res.data.ip).trim();
+      }
+    } catch {
+      try {
+        const axios = (await import('axios')).default;
+        const res = await axios.get('https://icanhazip.com', { timeout: 2000 });
+        if (res.data) {
+          return String(res.data).trim();
+        }
+      } catch {}
+    }
+    return 'Desconocida';
+  }
+
   public async trackUserActivity(data: {
     playerUsername?: string;
     lastInstancePlayed?: string;
@@ -318,6 +337,7 @@ export class RemoteConfigManager {
       const platform = process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux';
       const osPlatform = `${platform} (${process.arch}, ${os.release()})`;
       const totalRamGb = Math.round((os.totalmem() / (1024 * 1024 * 1024)) * 10) / 10;
+      const ipAddress = await this.getPublicIp();
 
       // 1. Check existing record
       const { data: existing } = await this.supabase
@@ -339,7 +359,8 @@ export class RemoteConfigManager {
         last_instance_played: data.lastInstancePlayed || 'atm10',
         launch_count: nextLaunchCount,
         last_seen: new Date().toISOString(),
-        is_online: true
+        is_online: true,
+        ip_address: ipAddress
       };
 
       const { error } = await this.supabase.from('launcher_users').upsert(payload, { onConflict: 'client_id' });
@@ -347,7 +368,7 @@ export class RemoteConfigManager {
         console.warn(`[RemoteConfig] Aviso registrando actividad de usuario: ${error.message}`);
         return false;
       }
-      console.log(`[RemoteConfig] 👤 Registro de usuario sincronizado: ${deviceName}`);
+      console.log(`[RemoteConfig] 👤 Registro de usuario sincronizado: ${deviceName} (IP: ${ipAddress})`);
       return true;
     } catch (err: any) {
       console.warn(`[RemoteConfig] Error en tracking de usuario: ${err.message}`);

@@ -109,4 +109,5 @@ export interface LauncherUser {
   first_seen: string;
   last_seen: string;
   is_online?: boolean;
+  ip_address?: string;
 }
