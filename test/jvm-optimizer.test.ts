@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { JVMOptimizer } from '../src/main/jvm-optimizer';
 
 describe('JVMOptimizer Performance Flag Tests', () => {
@@ -8,7 +8,7 @@ describe('JVMOptimizer Performance Flag Tests', () => {
     expect(flags).toContain('-XX:+ZGenerational');
     expect(flags).toContain('-XX:+AlwaysPreTouch');
     expect(flags).toContain('-XX:CICompilerCount=4');
-    expect(flags).toContain('-XX:+UseFastAccessorMethods');
+    expect(flags).toContain('-XX:+OptimizeStringConcat');
   });
 
   it('debe seleccionar Aikar G1GC para Java 17 o RAM moderada (4GB)', () => {

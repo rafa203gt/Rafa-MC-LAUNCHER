@@ -5,7 +5,8 @@ import { spawn } from 'node:child_process';
 
 const REPO_OWNER = 'rafa203gt';
 const REPO_NAME = 'Rafa-MC-LAUNCHER';
-const VERSION = '1.0.24';
+const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
+const VERSION = pkg.version || '1.0.25';
 const TAG = `v${VERSION}`;
 
 function getGitHubToken() {

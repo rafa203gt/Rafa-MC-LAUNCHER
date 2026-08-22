@@ -31,7 +31,6 @@ export class JVMOptimizer {
           '-XX:+AlwaysPreTouch',
           '-XX:+DisableExplicitGC',
           '-XX:+PerfDisableSharedMem',
-          '-XX:+UseFastAccessorMethods',
           '-XX:+OptimizeStringConcat',
           '-XX:+UseStringDeduplication',
           '-XX:+UseCompressedOops',
@@ -56,7 +55,6 @@ export class JVMOptimizer {
           '-XX:G1MaxNewSizePercent=30',
           '-XX:G1ReservePercent=15',
           '-XX:+PerfDisableSharedMem',
-          '-XX:+UseFastAccessorMethods',
           '-XX:+OptimizeStringConcat'
         ];
 
@@ -80,7 +78,6 @@ export class JVMOptimizer {
           '-XX:SurvivorRatio=32',
           '-XX:+PerfDisableSharedMem',
           '-XX:MaxTenuringThreshold=1',
-          '-XX:+UseFastAccessorMethods',
           '-XX:+OptimizeStringConcat',
           '-XX:+UseStringDeduplication',
           '-XX:CICompilerCount=4',
