@@ -16,6 +16,7 @@ export class GitHubStorageService {
   private owner: string = 'rafa203gt';
   private repo: string = 'Rafa-MC-LAUNCHER';
   private releaseTag: string = 'modpack-assets';
+  private releaseCache: Map<string, { id: number; upload_url: string }> = new Map();
 
   public hasEnvToken(): boolean {
     return !!((import.meta as any).env?.VITE_GITHUB_PAT);
@@ -46,15 +47,25 @@ export class GitHubStorageService {
   }
 
   // Calculate SHA-1 hash of a file in the browser
-  public async calculateSha1(fileOrBuffer: File | ArrayBuffer): Promise<string> {
-    const buffer = fileOrBuffer instanceof File ? await fileOrBuffer.arrayBuffer() : fileOrBuffer;
+  public async calculateSha1(fileOrBuffer: File | ArrayBuffer | Blob): Promise<string> {
+    const buffer =
+      fileOrBuffer instanceof File || fileOrBuffer instanceof Blob
+        ? await fileOrBuffer.arrayBuffer()
+        : fileOrBuffer;
     const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   // Get or Create the dedicated assets release
-  public async getOrCreateRelease(tag: string = this.releaseTag, releaseTitle?: string): Promise<{ id: number; upload_url: string }> {
+  public async getOrCreateRelease(
+    tag: string = this.releaseTag,
+    releaseTitle?: string
+  ): Promise<{ id: number; upload_url: string }> {
+    if (this.releaseCache.has(tag)) {
+      return this.releaseCache.get(tag)!;
+    }
+
     const token = this.getToken();
     if (!token) {
       throw new Error('Se requiere un Token Personal de GitHub (PAT) para subir archivos.');
@@ -68,12 +79,14 @@ export class GitHubStorageService {
         `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`,
         {
           headers: {
-            Authorization: `token ${token}`,
+            Authorization: `Bearer ${token}`,
             Accept: 'application/vnd.github.v3+json'
           }
         }
       );
-      return { id: res.data.id, upload_url: res.data.upload_url };
+      const data = { id: res.data.id, upload_url: res.data.upload_url };
+      this.releaseCache.set(tag, data);
+      return data;
     } catch (err: any) {
       if (err.response?.status === 404) {
         // 2. Create release if not exists
@@ -88,65 +101,97 @@ export class GitHubStorageService {
           },
           {
             headers: {
-              Authorization: `token ${token}`,
+              Authorization: `Bearer ${token}`,
               Accept: 'application/vnd.github.v3+json'
             }
           }
         );
-        return { id: createRes.data.id, upload_url: createRes.data.upload_url };
+        const data = { id: createRes.data.id, upload_url: createRes.data.upload_url };
+        this.releaseCache.set(tag, data);
+        return data;
       }
       throw new Error(`Error conectando con GitHub: ${err.message}`);
     }
   }
 
-  // Upload an asset to GitHub Release
+  // Upload an asset to GitHub Release with native fetch streaming & retries
   public async uploadAsset(
-    file: File | { name: string; buffer: ArrayBuffer },
+    file: File | { name: string; buffer: ArrayBuffer } | Blob & { name?: string },
     onProgress?: UploadProgressCallback,
-    tag: string = this.releaseTag
+    tag: string = this.releaseTag,
+    existingAssetId?: number
   ): Promise<{ name: string; url: string; size: number; sha1: string }> {
     const token = this.getToken();
     if (!token) throw new Error('Token de GitHub no configurado');
 
-    const fileName = file.name;
-    const buffer = file instanceof File ? await file.arrayBuffer() : file.buffer;
-    const size = buffer.byteLength;
+    const fileName = (file as any).name || 'asset.bin';
+    let blob: Blob;
+    let size: number;
+
+    if (file instanceof File || file instanceof Blob) {
+      blob = file;
+      size = file.size;
+    } else {
+      blob = new Blob([(file as any).buffer]);
+      size = (file as any).buffer.byteLength;
+    }
 
     if (onProgress) onProgress(fileName, 10, 'Calculando hash SHA-1...');
-    const sha1 = await this.calculateSha1(buffer);
+    const sha1 = await this.calculateSha1(blob);
 
     if (onProgress) onProgress(fileName, 25, 'Conectando con GitHub Releases...');
     const { upload_url } = await this.getOrCreateRelease(tag);
 
+    // Delete previous asset if ID is provided or check if exists
+    if (existingAssetId) {
+      await this.deleteAssetById(existingAssetId);
+    } else {
+      await this.deleteAssetIfExists(fileName, tag);
+    }
+
     // Clean upload_url template: https://uploads.github.com/.../assets{?name,label}
     const cleanUploadUrl = upload_url.split('{')[0] + `?name=${encodeURIComponent(fileName)}`;
 
-    if (onProgress) onProgress(fileName, 40, 'Subiendo a la red CDN de GitHub...');
+    if (onProgress) onProgress(fileName, 50, 'Subiendo a la red CDN de GitHub...');
 
-    // If asset with same name already exists in release, delete it first to overwrite
-    await this.deleteAssetIfExists(fileName, tag);
+    // Perform upload with native fetch to prevent CORS/binary buffer serialization issues
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(cleanUploadUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/octet-stream',
+            Accept: 'application/vnd.github.v3+json'
+          },
+          body: blob
+        });
 
-    const uploadRes = await axios.post(cleanUploadUrl, buffer, {
-      headers: {
-        Authorization: `token ${token}`,
-        'Content-Type': 'application/octet-stream'
-      },
-      onUploadProgress: (progressEvent) => {
-        if (progressEvent.total) {
-          const p = 40 + Math.round((progressEvent.loaded / progressEvent.total) * 55);
-          if (onProgress) onProgress(fileName, p, `Subiendo (${Math.round((progressEvent.loaded / (1024 * 1024)) * 10) / 10} MB)...`);
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`GitHub Upload Error (${response.status}): ${errText}`);
+        }
+
+        const data = await response.json();
+        if (onProgress) onProgress(fileName, 100, '¡Subido con éxito!');
+
+        return {
+          name: fileName,
+          url: data.browser_download_url,
+          size: size,
+          sha1: sha1
+        };
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[GitHubStorage] Reintento ${attempt}/3 para ${fileName}:`, err.message);
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
         }
       }
-    });
+    }
 
-    if (onProgress) onProgress(fileName, 100, '¡Subido con éxito!');
-
-    return {
-      name: fileName,
-      url: uploadRes.data.browser_download_url,
-      size: size,
-      sha1: sha1
-    };
+    throw lastError || new Error(`No se pudo subir ${fileName} a GitHub`);
   }
 
   // List existing assets in the release
@@ -160,7 +205,7 @@ export class GitHubStorageService {
         `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`,
         {
           headers: {
-            Authorization: `token ${token}`,
+            Authorization: `Bearer ${token}`,
             Accept: 'application/vnd.github.v3+json'
           }
         }
@@ -187,22 +232,7 @@ export class GitHubStorageService {
     const existing = assets.find((a) => a.name.toLowerCase() === fileName.toLowerCase());
     if (!existing) return false;
 
-    const [owner, repo] = this.getRepo().split('/');
-    try {
-      await axios.delete(
-        `https://api.github.com/repos/${owner}/${repo}/releases/assets/${existing.id}`,
-        {
-          headers: {
-            Authorization: `token ${token}`,
-            Accept: 'application/vnd.github.v3+json'
-          }
-        }
-      );
-      return true;
-    } catch (err) {
-      console.warn('No se pudo borrar asset previo:', err);
-      return false;
-    }
+    return this.deleteAssetById(existing.id);
   }
 
   // Delete an asset by ID
@@ -216,14 +246,14 @@ export class GitHubStorageService {
         `https://api.github.com/repos/${owner}/${repo}/releases/assets/${assetId}`,
         {
           headers: {
-            Authorization: `token ${token}`,
+            Authorization: `Bearer ${token}`,
             Accept: 'application/vnd.github.v3+json'
           }
         }
       );
       return true;
     } catch (err) {
-      console.warn('Error eliminando asset:', err);
+      console.warn('Error eliminando asset previo:', err);
       return false;
     }
   }

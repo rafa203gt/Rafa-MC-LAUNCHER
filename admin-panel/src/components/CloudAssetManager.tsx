@@ -544,66 +544,95 @@ export const CloudAssetManager: React.FC = () => {
   const handleUploadZipContents = async () => {
     if (!zipFiles.length || !selectedInstance) return;
     setIsBatchUploading(true);
-    setBatchProgress({ current: 0, total: zipFiles.length, currentFile: '' });
+    setBatchProgress({ current: 0, total: zipFiles.length, currentFile: 'Preparando subida...' });
     const releaseTag = `modpack-${selectedInstance.id}-assets`;
 
+    let successCount = 0;
+    const errors: string[] = [];
+
     try {
+      // 1. Obtener o crear release una sola vez
+      await gitHubStorage.getOrCreateRelease(releaseTag);
+      // 2. Listar assets existentes una sola vez para eliminar colisiones rápidamente
+      const existingAssets = await gitHubStorage.listAssets(releaseTag);
+      const existingMap = new Map(existingAssets.map((a) => [a.name.toLowerCase(), a.id]));
+
       for (let i = 0; i < zipFiles.length; i++) {
         const item = zipFiles[i];
         setBatchProgress({ current: i + 1, total: zipFiles.length, currentFile: item.name });
 
-        const arrayBuffer = await item.getData();
-        const uploaded = await gitHubStorage.uploadAsset(
-          { name: item.name, buffer: arrayBuffer },
-          undefined,
-          releaseTag
-        );
+        try {
+          const arrayBuffer = await item.getData();
+          const existingId = existingMap.get(item.name.toLowerCase());
 
-        let category = 'mods';
-        if (item.path.startsWith('shaderpacks/')) category = 'shaders';
-        else if (
-          item.path.startsWith('config/') ||
-          item.path.startsWith('defaultconfigs/') ||
-          item.path.startsWith('kubejs/') ||
-          item.name.endsWith('.toml') ||
-          item.name.endsWith('.cfg') ||
-          item.name.endsWith('.snbt')
-        ) {
-          category = 'config';
-        }
+          const uploaded = await gitHubStorage.uploadAsset(
+            { name: item.name, buffer: arrayBuffer },
+            undefined,
+            releaseTag,
+            existingId
+          );
 
-        // Insert into modpack_mods table
-        await supabase.from('modpack_mods').upsert(
-          {
-            instance_id: selectedInstance.id,
-            mod_name: item.name.replace(/\.(jar|zip|toml|json|snbt|cfg)$/i, '').replace(/[-_]/g, ' '),
-            file_name: item.name,
-            file_path: item.path,
-            file_size: uploaded.size,
-            sha1: uploaded.sha1,
-            download_url: uploaded.url,
-            is_enabled: true,
-            category: category
-          },
-          { onConflict: 'instance_id,file_name' }
-        );
+          let category = 'mods';
+          if (item.path.startsWith('shaderpacks/')) category = 'shaders';
+          else if (
+            item.path.startsWith('config/') ||
+            item.path.startsWith('defaultconfigs/') ||
+            item.path.startsWith('kubejs/') ||
+            item.name.endsWith('.toml') ||
+            item.name.endsWith('.cfg') ||
+            item.name.endsWith('.snbt')
+          ) {
+            category = 'config';
+          }
 
-        if (category === 'shaders') {
-          await supabase.from('shaderpacks').upsert({
-            id: item.name.replace(/\.zip$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '-'),
-            name: item.name.replace(/\.zip$/i, ''),
-            description: `Shaderpack de ${selectedInstance.name}`,
-            performance_tier: 'balanced',
-            download_url: uploaded.url,
-            file_name: item.name,
-            file_size: uploaded.size,
-            is_active: true
-          });
+          // Insert into modpack_mods table
+          await supabase.from('modpack_mods').upsert(
+            {
+              instance_id: selectedInstance.id,
+              mod_name: item.name.replace(/\.(jar|zip|toml|json|snbt|cfg)$/i, '').replace(/[-_]/g, ' '),
+              file_name: item.name,
+              file_path: item.path,
+              file_size: uploaded.size,
+              sha1: uploaded.sha1,
+              download_url: uploaded.url,
+              is_enabled: true,
+              category: category
+            },
+            { onConflict: 'instance_id,file_name' }
+          );
+
+          if (category === 'shaders') {
+            await supabase.from('shaderpacks').upsert({
+              id: item.name.replace(/\.zip$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '-'),
+              name: item.name.replace(/\.zip$/i, ''),
+              description: `Shaderpack de ${selectedInstance.name}`,
+              performance_tier: 'balanced',
+              download_url: uploaded.url,
+              file_name: item.name,
+              file_size: uploaded.size,
+              is_active: true
+            });
+          }
+
+          successCount++;
+          // Pequeña pausa de 30ms para evitar rate limiting secundario de GitHub
+          await new Promise((r) => setTimeout(r, 30));
+        } catch (itemErr: any) {
+          console.error(`Error subiendo ${item.name}:`, itemErr);
+          errors.push(`${item.name}: ${itemErr.message}`);
         }
       }
 
-      alert(`✅ ¡${zipFiles.length} archivos subidos y clasificados con éxito en "${selectedInstance.name}"!`);
-      setZipFiles([]);
+      if (errors.length === 0) {
+        alert(`✅ ¡${successCount} archivos subidos y clasificados con éxito en "${selectedInstance.name}"!`);
+        setZipFiles([]);
+      } else {
+        alert(
+          `⚠️ Subida completada: ${successCount} archivos subidos con éxito, ${errors.length} con advertencia:\n` +
+            errors.slice(0, 3).join('\n')
+        );
+      }
+
       await loadInstanceData(selectedInstance.id);
     } catch (err: any) {
       alert(`Error durante la subida masiva: ${err.message}`);
