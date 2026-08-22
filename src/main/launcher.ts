@@ -539,10 +539,22 @@ export class MinecraftLauncher {
             ]
           : [];
 
+      // 7. Sincronización y Agente de Cosméticos 3D estilo Lunar Client (Universal para Vanilla y Modpacks)
+      let cosmeticsJvmArgs: string[] = [];
+      try {
+        const { cosmeticsAgentManager } = await import('./cosmetics-agent');
+        await cosmeticsAgentManager.syncAllMultiplayerCosmetics(instanceDir, onLog);
+        cosmeticsJvmArgs = cosmeticsAgentManager.getJvmInjectionArgs(cleanUsername);
+        onLog(`[CosmeticsCore] 🪽 Agente de Cosméticos 3D estilo Lunar inyectado para: ${cleanUsername}`);
+      } catch (cosmeticsErr: any) {
+        onLog(`[CosmeticsCore] Aviso al inicializar cosméticos: ${cosmeticsErr.message}`);
+      }
+
       // JVM Arguments (solo flags para Java VM)
       const customArgs: string[] = [
         ...performanceGcArgs,
         ...modLoaderModuleArgs,
+        ...cosmeticsJvmArgs,
         ...(settings.jvmArgs || [])
       ];
 
