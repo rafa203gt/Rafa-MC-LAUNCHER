@@ -225,6 +225,22 @@ export const SkinsView: React.FC<SkinsViewProps> = ({ currentUsername, onUsernam
         console.warn('Error loading skin texture into WebGL canvas:', err);
       }
     }
+
+    // Auto-guardado transparente en disco para asegurar visualización en el juego
+    try {
+      if (window.launcherAPI?.saveUserSkin) {
+        const usernameToSave = (currentUsername || 'Jugador').trim();
+        await window.launcherAPI.saveUserSkin({
+          username: usernameToSave,
+          skinUrl: skinUrl,
+          skinData: skinUrl.startsWith('data:image/png;base64,') ? skinUrl : undefined,
+          model: model,
+          capeUrl: cape || null
+        });
+      }
+    } catch (e) {
+      console.warn('Auto-save skin error:', e);
+    }
   };
 
   // Search User via Public Mojang / Ashcon API
