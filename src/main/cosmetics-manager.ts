@@ -46,6 +46,11 @@ export class CosmeticsManager {
   private readonly SUPABASE_URL = ENV.SUPABASE_URL;
   private readonly SUPABASE_KEY = ENV.SUPABASE_ANON_KEY;
 
+  // Memoria local de respaldo y alta velocidad
+  private localEconomy: Map<string, UserEconomy> = new Map();
+  private localInventory: Map<string, string[]> = new Map();
+  private localEquipped: Map<string, UserEquippedCosmetics> = new Map();
+
   private get headers() {
     return {
       apikey: this.SUPABASE_KEY,
@@ -59,6 +64,11 @@ export class CosmeticsManager {
    * Obtiene todos los cosméticos activos disponibles en la tienda.
    */
   public async getCatalog(): Promise<ShopCosmetic[]> {
+    if (!this.SUPABASE_URL || !this.SUPABASE_KEY) {
+      console.warn('[CosmeticsManager] SUPABASE_URL no configurada.');
+      return [];
+    }
+
     try {
       const res = await axios.get(`${this.SUPABASE_URL}/rest/v1/shop_cosmetics?is_active=eq.true&order=price.asc`, {
         headers: this.headers,
@@ -76,7 +86,7 @@ export class CosmeticsManager {
    */
   public async getUserInventory(username: string): Promise<string[]> {
     const cleanUser = (username || '').trim();
-    if (!cleanUser) return [];
+    if (!cleanUser || !this.SUPABASE_URL) return [];
 
     try {
       const res = await axios.get(
@@ -103,7 +113,7 @@ export class CosmeticsManager {
       bandana_id: null
     };
 
-    if (!cleanUser) return fallback;
+    if (!cleanUser || !this.SUPABASE_URL) return fallback;
 
     try {
       const res = await axios.get(
@@ -201,7 +211,7 @@ export class CosmeticsManager {
    */
   public async getUserEconomy(username: string): Promise<UserEconomy> {
     const cleanUser = (username || '').trim();
-    const fallback: UserEconomy = {
+    const fallback: UserEconomy = this.localEconomy.get(cleanUser) || {
       username: cleanUser,
       coins: 500, // Bono inicial de bienvenida
       playtime_minutes: 0,
@@ -209,6 +219,10 @@ export class CosmeticsManager {
     };
 
     if (!cleanUser) return fallback;
+    if (!this.SUPABASE_URL || !this.SUPABASE_KEY) {
+      this.localEconomy.set(cleanUser, fallback);
+      return fallback;
+    }
 
     try {
       const res = await axios.get(
@@ -217,6 +231,7 @@ export class CosmeticsManager {
       );
 
       if (res.data && res.data.length > 0) {
+        this.localEconomy.set(cleanUser, res.data[0]);
         return res.data[0];
       }
 
@@ -225,6 +240,7 @@ export class CosmeticsManager {
         headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' },
         timeout: 8000
       });
+      this.localEconomy.set(cleanUser, fallback);
       return fallback;
     } catch (err: any) {
       console.warn('[CosmeticsManager] Error obteniendo economía de usuario:', err.message);
@@ -258,28 +274,31 @@ export class CosmeticsManager {
 
     // 4. Deducir monedas
     const remainingCoins = economy.coins - item.price;
-    await axios.post(
-      `${this.SUPABASE_URL}/rest/v1/user_economy`,
-      {
-        username: cleanUser,
-        coins: remainingCoins,
-        updated_at: new Date().toISOString()
-      },
-      { headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' }, timeout: 8000 }
-    );
+    const updatedEconomy = { ...economy, coins: remainingCoins, updated_at: new Date().toISOString() };
+    this.localEconomy.set(cleanUser, updatedEconomy);
 
-    // 5. Añadir al inventario
-    await axios.post(
-      `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory`,
-      {
-        username: cleanUser,
-        cosmetic_id: cosmeticId,
-        acquired_at: new Date().toISOString()
-      },
-      { headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' }, timeout: 8000 }
-    );
+    if (this.SUPABASE_URL && this.SUPABASE_KEY) {
+      try {
+        await axios.post(`${this.SUPABASE_URL}/rest/v1/user_economy`, updatedEconomy, {
+          headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' },
+          timeout: 8000
+        });
+      } catch {}
 
-    // 6. Auto-equipar el cosmético comprado
+      try {
+        await axios.post(
+          `${this.SUPABASE_URL}/rest/v1/user_cosmetics_inventory`,
+          {
+            username: cleanUser,
+            cosmetic_id: cosmeticId,
+            acquired_at: new Date().toISOString()
+          },
+          { headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' }, timeout: 8000 }
+        );
+      } catch {}
+    }
+
+    // 5. Auto-equipar el cosmético comprado
     try {
       await this.equipCosmetic(cleanUser, item.category as any, cosmeticId);
     } catch {}
@@ -307,17 +326,23 @@ export class CosmeticsManager {
 
     const reward = 100;
     const newBalance = economy.coins + reward;
+    const updatedEconomy: UserEconomy = {
+      ...economy,
+      coins: newBalance,
+      last_daily_reward: today,
+      updated_at: new Date().toISOString()
+    };
 
-    await axios.post(
-      `${this.SUPABASE_URL}/rest/v1/user_economy`,
-      {
-        username: cleanUser,
-        coins: newBalance,
-        last_daily_reward: today,
-        updated_at: new Date().toISOString()
-      },
-      { headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' }, timeout: 8000 }
-    );
+    this.localEconomy.set(cleanUser, updatedEconomy);
+
+    if (this.SUPABASE_URL && this.SUPABASE_KEY) {
+      try {
+        await axios.post(`${this.SUPABASE_URL}/rest/v1/user_economy`, updatedEconomy, {
+          headers: { ...this.headers, Prefer: 'resolution=merge-duplicates' },
+          timeout: 8000
+        });
+      } catch {}
+    }
 
     return {
       success: true,
