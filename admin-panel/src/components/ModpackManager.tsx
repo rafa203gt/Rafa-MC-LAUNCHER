@@ -195,9 +195,17 @@ export const ModpackManager: React.FC<ModpackManagerProps> = ({ mods, instances,
     }
   };
 
-  // Filtered mods list for selected instance
+  // Filtered mods list for selected instance (strictly mods, excluding configs/shaders)
   const instanceMods = useMemo(() => {
-    return mods.filter((m) => (m.instance_id || 'atm10') === selectedInstanceId);
+    return mods.filter(
+      (m) =>
+        (m.instance_id || 'atm10') === selectedInstanceId &&
+        (m.category === 'mod' || m.category === 'mods' || !m.category) &&
+        !m.file_path?.startsWith('config/') &&
+        !m.file_path?.startsWith('defaultconfigs/') &&
+        !m.file_path?.startsWith('shaderpacks/') &&
+        (m.file_name?.endsWith('.jar') || m.file_path?.startsWith('mods/'))
+    );
   }, [mods, selectedInstanceId]);
 
   const filteredMods = useMemo(() => {

@@ -41,6 +41,43 @@ import {
 import { gitHubStorage, GitHubAsset } from '../github-storage';
 import { supabase, RemoteInstance, ModpackMod, Shaderpack } from '../supabase';
 
+export const detectFileCategory = (
+  filePath: string,
+  fileName: string
+): 'mod' | 'config' | 'shaders' | 'script' | 'datapack' | 'other' => {
+  const p = (filePath || '').toLowerCase();
+  const f = (fileName || '').toLowerCase();
+
+  if (p.startsWith('shaderpacks/') || p.startsWith('resourcepacks/') || (f.endsWith('.zip') && !p.startsWith('mods/'))) {
+    return 'shaders';
+  }
+  if (
+    p.startsWith('config/') ||
+    p.startsWith('defaultconfigs/') ||
+    p.startsWith('local/') ||
+    f.endsWith('.toml') ||
+    f.endsWith('.json') ||
+    f.endsWith('.json5') ||
+    f.endsWith('.cfg') ||
+    f.endsWith('.snbt') ||
+    f.endsWith('.ini') ||
+    f.endsWith('.properties') ||
+    f === 'options.txt'
+  ) {
+    return 'config';
+  }
+  if (p.startsWith('kubejs/') || p.startsWith('crafttweaker/') || f.endsWith('.js') || f.endsWith('.zs')) {
+    return 'script';
+  }
+  if (p.startsWith('datapacks/') || p.startsWith('saves/')) {
+    return 'datapack';
+  }
+  if (f.endsWith('.jar') || p.startsWith('mods/')) {
+    return 'mod';
+  }
+  return 'other';
+};
+
 interface ConfigItem {
   id?: string;
   name: string;
@@ -58,12 +95,21 @@ export const CloudAssetManager: React.FC = () => {
   const [isSavingParams, setIsSavingParams] = useState(false);
 
   // Tabs & Security state
-  const [activeTab, setActiveTab] = useState<'settings' | 'mods' | 'configs' | 'shaders' | 'modpack_zip' | 'manifest'>('settings');
+  const [activeTab, setActiveTab] = useState<
+    'settings' | 'all_files' | 'mods' | 'configs' | 'shaders' | 'modpack_zip' | 'manifest'
+  >('settings');
   const [token, setToken] = useState(gitHubStorage.getToken());
   const [repo, setRepo] = useState(gitHubStorage.getRepo());
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // All Files list state (Explorer)
+  const [allFiles, setAllFiles] = useState<ModpackMod[]>([]);
+  const [fileExplorerSearch, setFileExplorerSearch] = useState('');
+  const [fileExplorerCategory, setFileExplorerCategory] = useState<
+    'all' | 'mod' | 'config' | 'shaders' | 'script' | 'datapack' | 'other'
+  >('all');
 
   // Mods list state (from Supabase & GitHub)
   const [mods, setMods] = useState<ModpackMod[]>([]);
@@ -99,6 +145,25 @@ export const CloudAssetManager: React.FC = () => {
       return true;
     });
   }, [configsList, configSearchTerm, configFilterExt]);
+
+  const filteredAllFiles = useMemo(() => {
+    return allFiles.filter((f) => {
+      const q = fileExplorerSearch.toLowerCase();
+      const matchesSearch =
+        !q ||
+        f.file_name?.toLowerCase().includes(q) ||
+        f.file_path?.toLowerCase().includes(q) ||
+        f.mod_name?.toLowerCase().includes(q);
+
+      if (!matchesSearch) return false;
+
+      const detected = detectFileCategory(f.file_path || '', f.file_name || '');
+      if (fileExplorerCategory !== 'all' && detected !== fileExplorerCategory) {
+        return false;
+      }
+      return true;
+    });
+  }, [allFiles, fileExplorerSearch, fileExplorerCategory]);
 
   // Shaders & Textures state
   const [shadersList, setShadersList] = useState<Shaderpack[]>([]);
@@ -173,32 +238,22 @@ export const CloudAssetManager: React.FC = () => {
         .order('mod_name', { ascending: true });
 
       if (!modsError && modsData) {
+        setAllFiles(modsData as ModpackMod[]);
+
         // Mods tab: only actual mods (.jar or category === 'mod'/'mods')
         const modsOnly = modsData.filter(
           (m) =>
             (m.category === 'mod' || m.category === 'mods' || !m.category) &&
-            !m.file_path.startsWith('config/') &&
-            !m.file_path.startsWith('defaultconfigs/') &&
-            !m.file_path.startsWith('shaderpacks/') &&
-            (m.file_name.endsWith('.jar') || m.file_path.startsWith('mods/'))
+            !m.file_path?.startsWith('config/') &&
+            !m.file_path?.startsWith('defaultconfigs/') &&
+            !m.file_path?.startsWith('shaderpacks/') &&
+            (m.file_name?.endsWith('.jar') || m.file_path?.startsWith('mods/'))
         );
         setMods(modsOnly);
 
         // Configs tab: actual config files for this instance
         const configsFromDb = modsData.filter(
-          (m) =>
-            m.category === 'config' ||
-            m.category === 'configs' ||
-            m.file_path?.startsWith('config/') ||
-            m.file_path?.startsWith('defaultconfigs/') ||
-            m.file_path?.startsWith('kubejs/') ||
-            m.file_name?.endsWith('.toml') ||
-            m.file_name?.endsWith('.json') ||
-            m.file_name?.endsWith('.json5') ||
-            m.file_name?.endsWith('.snbt') ||
-            m.file_name?.endsWith('.cfg') ||
-            m.file_name?.endsWith('.ini') ||
-            m.file_name === 'options.txt'
+          (m) => detectFileCategory(m.file_path || '', m.file_name || '') === 'config'
         );
 
         const loadedConfigs: ConfigItem[] = configsFromDb.map((c) => ({
@@ -219,11 +274,7 @@ export const CloudAssetManager: React.FC = () => {
 
         // Shaders tab: shaders belonging to this instance
         const shadersFromMods = modsData.filter(
-          (m) =>
-            m.category === 'shaders' ||
-            m.category === 'shader' ||
-            m.file_path.startsWith('shaderpacks/') ||
-            (m.file_name.endsWith('.zip') && !m.file_path.startsWith('mods/'))
+          (m) => detectFileCategory(m.file_path || '', m.file_name || '') === 'shaders'
         );
 
         const instanceShaders: Shaderpack[] = shadersFromMods.map((s) => ({
@@ -972,6 +1023,14 @@ export const CloudAssetManager: React.FC = () => {
           <Settings className="w-4 h-4" /> ⚙️ Parámetros ({selectedInstance?.name || 'Instancia'})
         </button>
         <button
+          onClick={() => setActiveTab('all_files')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === 'all_files' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FolderArchive className="w-4 h-4 text-cyan-400" /> 📁 Explorador de Modpack ({allFiles.length})
+        </button>
+        <button
           onClick={() => setActiveTab('mods')}
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'mods' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
@@ -1207,6 +1266,223 @@ export const CloudAssetManager: React.FC = () => {
             </div>
           </div>
         </form>
+      )}
+
+      {/* TAB: EXPLORADOR DE MODPACK (TODOS LOS ARCHIVOS DETECTADOS) */}
+      {activeTab === 'all_files' && selectedInstance && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header & Upload Box */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl text-cyan-400">
+                  <FolderArchive className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                    Explorador de Archivos de "{selectedInstance.name}"
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Visualiza, busca y administra todos los {allFiles.length} archivos del modpack clasificados automáticamente.
+                  </p>
+                </div>
+              </div>
+
+              {/* Subir archivo suelto con auto-detección */}
+              <div>
+                <input
+                  type="file"
+                  multiple
+                  id="all-files-upload"
+                  className="hidden"
+                  onChange={(e) => handleFileUpload(e.target.files, 'mods')}
+                />
+                <label
+                  htmlFor="all-files-upload"
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Subir Cualquier Archivo
+                </label>
+              </div>
+            </div>
+
+            {/* Quick Filter Chips & Search Bar */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pt-2">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Buscar por ruta o nombre de archivo..."
+                  value={fileExplorerSearch}
+                  onChange={(e) => setFileExplorerSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-bold">
+                <button
+                  onClick={() => setFileExplorerCategory('all')}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${
+                    fileExplorerCategory === 'all'
+                      ? 'bg-cyan-600 text-white shadow'
+                      : 'bg-slate-950 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Todos ({allFiles.length})
+                </button>
+                <button
+                  onClick={() => setFileExplorerCategory('mod')}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${
+                    fileExplorerCategory === 'mod'
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'bg-slate-950 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  🧩 Mods ({mods.length})
+                </button>
+                <button
+                  onClick={() => setFileExplorerCategory('config')}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${
+                    fileExplorerCategory === 'config'
+                      ? 'bg-emerald-600 text-white shadow'
+                      : 'bg-slate-950 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📝 Configs ({configsList.length})
+                </button>
+                <button
+                  onClick={() => setFileExplorerCategory('shaders')}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${
+                    fileExplorerCategory === 'shaders'
+                      ? 'bg-pink-600 text-white shadow'
+                      : 'bg-slate-950 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ✨ Shaders ({shadersList.length})
+                </button>
+                <button
+                  onClick={() => setFileExplorerCategory('script')}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${
+                    fileExplorerCategory === 'script'
+                      ? 'bg-amber-600 text-white shadow'
+                      : 'bg-slate-950 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📜 Scripts ({allFiles.filter((f) => detectFileCategory(f.file_path || '', f.file_name || '') === 'script').length})
+                </button>
+                <button
+                  onClick={() => setFileExplorerCategory('datapack')}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${
+                    fileExplorerCategory === 'datapack'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'bg-slate-950 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📦 Datapacks ({allFiles.filter((f) => detectFileCategory(f.file_path || '', f.file_name || '') === 'datapack').length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Files Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/90 sticky top-0 z-10 text-slate-400 font-bold border-b border-slate-800 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3.5">Tipo</th>
+                    <th className="px-6 py-3.5">Ruta en Modpack</th>
+                    <th className="px-6 py-3.5">Nombre de Archivo</th>
+                    <th className="px-6 py-3.5">Tamaño</th>
+                    <th className="px-6 py-3.5 text-center">Estado</th>
+                    <th className="px-6 py-3.5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-mono">
+                  {filteredAllFiles.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-16 text-center text-slate-500">
+                        <FolderArchive className="w-12 h-12 text-slate-600 mx-auto mb-3 opacity-60" />
+                        <p className="text-sm font-bold text-slate-400 font-sans">No hay archivos coincidentes</p>
+                        <p className="text-xs text-slate-500 mt-1 font-sans">
+                          Usa el botón "Subir Cualquier Archivo" o la pestaña "Extractor .ZIP" para importar los archivos de tu modpack.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAllFiles.map((file) => {
+                      const detected = detectFileCategory(file.file_path || '', file.file_name || '');
+                      const badgeColor =
+                        detected === 'mod'
+                          ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                          : detected === 'config'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : detected === 'shaders'
+                          ? 'bg-pink-500/10 text-pink-400 border-pink-500/30'
+                          : detected === 'script'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                          : detected === 'datapack'
+                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                          : 'bg-slate-700/20 text-slate-400 border-slate-700';
+
+                      const sizeKb = file.file_size ? (file.file_size / 1024).toFixed(1) + ' KB' : 'N/D';
+
+                      return (
+                        <tr key={file.id} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="px-6 py-3">
+                            <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wider ${badgeColor}`}>
+                              {detected}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-slate-300 max-w-xs truncate text-[11px]" title={file.file_path}>
+                            {file.file_path || file.file_name}
+                          </td>
+                          <td className="px-6 py-3 font-bold text-white max-w-xs truncate" title={file.file_name}>
+                            {file.file_name}
+                          </td>
+                          <td className="px-6 py-3 text-slate-400 text-[11px] whitespace-nowrap">
+                            {sizeKb}
+                          </td>
+                          <td className="px-6 py-3 text-center">
+                            <button
+                              onClick={() => handleToggleMod(file)}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 mx-auto transition-all ${
+                                file.is_enabled
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                              }`}
+                            >
+                              {file.is_enabled ? (
+                                <>
+                                  <ToggleRight className="w-3.5 h-3.5" /> Activo
+                                </>
+                              ) : (
+                                <>
+                                  <ToggleLeft className="w-3.5 h-3.5" /> Desactivado
+                                </>
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <button
+                              onClick={() => handleDeleteMod(file)}
+                              className="p-1.5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition-colors"
+                              title="Eliminar este archivo del modpack"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* TAB 1: MODS */}

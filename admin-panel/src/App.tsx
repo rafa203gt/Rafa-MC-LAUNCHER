@@ -154,12 +154,22 @@ export const App: React.FC = () => {
         .order('created_at', { ascending: false });
       if (newsData) setNews(newsData as NewsAnnouncement[]);
 
-      // 4. Mods
+      // 4. Mods (Filtrar solo archivos .jar reales para no mezclar configs ni shaders)
       const { data: modsData } = await supabase
         .from('modpack_mods')
         .select('*')
         .order('mod_name', { ascending: true });
-      if (modsData) setMods(modsData as ModpackMod[]);
+      if (modsData) {
+        const actualMods = (modsData as ModpackMod[]).filter(
+          (m) =>
+            (m.category === 'mod' || m.category === 'mods' || !m.category) &&
+            !m.file_path?.startsWith('config/') &&
+            !m.file_path?.startsWith('defaultconfigs/') &&
+            !m.file_path?.startsWith('shaderpacks/') &&
+            (m.file_name?.endsWith('.jar') || m.file_path?.startsWith('mods/'))
+        );
+        setMods(actualMods);
+      }
 
       // 5. Shaders
       const { data: shadersData } = await supabase
