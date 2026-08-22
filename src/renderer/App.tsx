@@ -12,13 +12,15 @@ import { SettingsModal } from './components/SettingsModal';
 import { ConsoleModal } from './components/ConsoleModal';
 import { ShadersModal } from './components/ShadersModal';
 import { SkinsView } from './components/SkinsView';
+import { CrashAssistantModal } from './components/CrashAssistantModal';
 import {
   AppSettings,
   ServerStatusResult,
   ProgressEventPayload,
   MinecraftInstance,
   RemoteLauncherConfig,
-  NewsAnnouncement
+  NewsAnnouncement,
+  CrashDiagnosis
 } from './types';
 
 export const App: React.FC = () => {
@@ -27,8 +29,10 @@ export const App: React.FC = () => {
   const [instances, setInstances] = useState<MinecraftInstance[]>([]);
   const [remoteConfig, setRemoteConfig] = useState<RemoteLauncherConfig | null>(null);
   const [news, setNews] = useState<NewsAnnouncement[]>([]);
-  const [appVersion, setAppVersion] = useState('1.0.20');
+  const [appVersion, setAppVersion] = useState('1.0.21');
   const [isShadersOpen, setIsShadersOpen] = useState(false);
+  const [crashDiagnosis, setCrashDiagnosis] = useState<CrashDiagnosis | null>(null);
+  const [isCrashModalOpen, setIsCrashModalOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     username: 'Jugador',
     minRam: 2048,
@@ -186,12 +190,19 @@ export const App: React.FC = () => {
       if (newsList) setNews(newsList);
     });
 
+    const unbindCrash = window.launcherAPI.onCrashDiagnosis?.((diag) => {
+      console.warn('[Renderer] 🚨 Crash detectado:', diag);
+      setCrashDiagnosis(diag);
+      setIsCrashModalOpen(true);
+    });
+
     return () => {
       unbindProgress();
       unbindLog();
       unbindClosed();
       if (unbindRemoteConfig) unbindRemoteConfig();
       if (unbindRemoteNews) unbindRemoteNews();
+      if (unbindCrash) unbindCrash();
     };
   }, []);
 
@@ -284,6 +295,26 @@ export const App: React.FC = () => {
       console.error(err);
     } finally {
       setIsLaunching(false);
+    }
+  };
+
+  const handleAutoFixCrash = async (action: string) => {
+    try {
+      if (action === 'increase_ram') {
+        const newRam = 8192;
+        await handleSaveSettings({ maxRam: newRam });
+        setTimeout(() => handleLaunch(), 500);
+      } else if (action === 'force_gpu') {
+        await handleSaveSettings({ jvmProfile: 'aikar' });
+        setTimeout(() => handleLaunch(), 500);
+      } else if (action === 'repair_java') {
+        await handleSaveSettings({ autoJava: true, customJavaPath: '' });
+        setTimeout(() => handleLaunch(), 500);
+      } else if (action === 'reinstall_modpack') {
+        await handleReinstallModpack();
+      }
+    } catch (err) {
+      console.error('Error aplicando auto-reparación:', err);
     }
   };
 
@@ -397,6 +428,15 @@ export const App: React.FC = () => {
         isOpen={isShadersOpen}
         onClose={() => setIsShadersOpen(false)}
         instanceId={activeInstance?.id}
+      />
+
+      {/* Smart Anti-Crash Assistant Modal */}
+      <CrashAssistantModal
+        isOpen={isCrashModalOpen}
+        diagnosis={crashDiagnosis}
+        onClose={() => setIsCrashModalOpen(false)}
+        onAutoFix={handleAutoFixCrash}
+        onOpenLogsFolder={() => window.launcherAPI?.openFolder?.('logs')}
       />
     </div>
   );

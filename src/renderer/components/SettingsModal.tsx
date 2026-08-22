@@ -377,6 +377,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onSave }
             </p>
           </div>
         </div>
+
+        {/* Extreme Performance & Launcher Lifecycle Card */}
+        <div className="bg-mc-card border border-mc-border rounded-2xl p-6 space-y-4 md:col-span-2">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Zap className="w-4 h-4 text-emerald-400" />
+            Modo Rendimiento Extremo al Jugar (Cero Consumo)
+          </h3>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1.5">
+                Comportamiento de la ventana al iniciar Minecraft
+              </label>
+              <select
+                value={formData.launcherBehavior || 'tray'}
+                onChange={(e: any) => setFormData({ ...formData, launcherBehavior: e.target.value })}
+                className="w-full bg-mc-darker border border-mc-border focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-white font-medium"
+              >
+                <option value="tray">🟢 Ocultar a la Bandeja del Sistema (Recomendado - 0% CPU & 0% GPU)</option>
+                <option value="keep">🖥️ Mantener visible el Launcher en segundo plano</option>
+                <option value="close">🚪 Cerrar completamente el Launcher al iniciar el juego</option>
+              </select>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              Al ocultar a la bandeja, Electron suspende todos los procesos gráficos para que Minecraft tenga el 100% de los recursos del PC. Al salir del juego, el launcher se restaurará automáticamente.
+            </p>
+          </div>
+        </div>
       </div>
     </form>
   );

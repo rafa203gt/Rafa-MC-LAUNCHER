@@ -18,6 +18,19 @@ export interface AppSettings {
   jvmArgs: string[];
   discordRpc?: boolean;
   jvmProfile?: 'auto' | 'aikar' | 'zgc' | 'low_end' | 'custom';
+  launcherBehavior?: 'tray' | 'keep' | 'close';
+}
+
+export interface CrashDiagnosis {
+  exitCode: number;
+  type: 'out_of_memory' | 'graphics_driver' | 'corrupt_mod' | 'java_version' | 'generic';
+  title: string;
+  description: string;
+  culpritFile?: string;
+  recommendedAction: 'increase_ram' | 'force_gpu' | 'reinstall_modpack' | 'repair_java' | 'view_logs';
+  actionButtonText: string;
+  rawLogSnippet: string;
+  timestamp: string;
 }
 
 export interface SystemHardwareInfo {
@@ -164,6 +177,8 @@ export interface LauncherAPI {
   onProgress: (callback: (data: ProgressEventPayload) => void) => () => void;
   onLog: (callback: (log: string) => void) => () => void;
   onGameClosed: (callback: (code: number) => void) => () => void;
+  diagnoseLastCrash?: () => Promise<CrashDiagnosis>;
+  onCrashDiagnosis?: (callback: (data: CrashDiagnosis) => void) => () => void;
 }
 
 declare global {

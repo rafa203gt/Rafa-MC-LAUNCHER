@@ -71,7 +71,7 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
 
   // Auto-cleanup any older executable versions in user directory
@@ -79,6 +79,12 @@ app.whenReady().then(() => {
 
   // Initialize Supabase Realtime live sync
   remoteConfigManager.initRealtime(() => mainWindow);
+
+  // Initialize System Tray for Extreme Performance Mode
+  const { trayManager } = await import('./tray-manager');
+  if (mainWindow) {
+    trayManager.init(mainWindow);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -162,15 +168,20 @@ ipcMain.handle('instances:delete', async (_event, instanceId: string) => {
   return instanceManager.deleteInstance(instanceId);
 });
 
-// 4. Launcher execution
+// 4. Launcher execution with System Tray & Anti-Crash
 ipcMain.handle('launcher:launch', async (_event, options) => {
   if (!mainWindow) return;
 
   const { discordRPC } = await import('./discord-rpc');
+  const { trayManager } = await import('./tray-manager');
+  const { crashAnalyzer } = await import('./crash-analyzer');
+
   const activeInst = instanceManager.getActiveInstance();
+  const settings = configStore.getSettings();
+
   discordRPC.updateActivity({
     instanceName: activeInst?.name || 'All the Mods 10',
-    serverIp: activeInst?.serverIp || configStore.getSettings().serverIp,
+    serverIp: activeInst?.serverIp || settings.serverIp,
     isPlaying: true,
     startTimestamp: Math.floor(Date.now() / 1000)
   });
@@ -181,6 +192,16 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
       if (mainWindow) {
         mainWindow.webContents.send('launcher:progress', progress);
       }
+
+      // Extreme Performance Mode: Hide to system tray when game starts running
+      if (progress.stage === 'running') {
+        const behavior = (settings as any).launcherBehavior || 'tray';
+        if (behavior === 'tray') {
+          trayManager.hideToTray(`Jugando a ${activeInst?.name || 'Minecraft'}`);
+        } else if (behavior === 'close') {
+          app.quit();
+        }
+      }
     },
     (log) => {
       if (mainWindow) {
@@ -188,26 +209,43 @@ ipcMain.handle('launcher:launch', async (_event, options) => {
       }
     },
     async (code) => {
+      // Restore window when game closes
+      trayManager.restoreFromTray();
+
       discordRPC.updateActivity({
         instanceName: activeInst?.name || 'All the Mods 10',
-        serverIp: activeInst?.serverIp || configStore.getSettings().serverIp,
+        serverIp: activeInst?.serverIp || settings.serverIp,
         isPlaying: false
       });
+
+      // Crash handling & post-mortem diagnosis
       if (code !== 0 && code !== null) {
-        const settings = configStore.getSettings();
+        const diagnosis = crashAnalyzer.diagnose(configStore.getInstanceDir(), code);
+
         remoteConfigManager.reportCrash({
           username: options.username || 'Jugador',
           minecraftVersion: settings.minecraftVersion,
           launcherVersion: app.getVersion(),
           ramAllocated: options.maxRam || settings.maxRam,
-          errorMessage: `El proceso de Minecraft finalizó con código de error ${code}`
+          errorMessage: `[${diagnosis.type}] ${diagnosis.title}: ${diagnosis.description}`
         });
+
+        if (mainWindow) {
+          mainWindow.webContents.send('launcher:crash-diagnosis', diagnosis);
+        }
       }
+
       if (mainWindow) {
         mainWindow.webContents.send('launcher:closed', code);
       }
     }
   );
+});
+
+// Diagnostic IPC
+ipcMain.handle('game:diagnose-crash', async () => {
+  const { crashAnalyzer } = await import('./crash-analyzer');
+  return crashAnalyzer.diagnose(configStore.getInstanceDir(), 1);
 });
 
 // 5. System & Folder Explorer

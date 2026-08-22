@@ -83,6 +83,14 @@ export const API = {
     ipcRenderer.on('launcher:log', handler);
     return () => ipcRenderer.removeListener('launcher:log', handler);
   },
+  // Crash Diagnosis & Anti-Crash
+  diagnoseLastCrash: () => ipcRenderer.invoke('game:diagnose-crash'),
+  onCrashDiagnosis: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('launcher:crash-diagnosis', handler);
+    return () => ipcRenderer.removeListener('launcher:crash-diagnosis', handler);
+  },
+
   onGameClosed: (callback: (code: number) => void) => {
     const handler = (_event: any, code: number) => callback(code);
     ipcRenderer.on('launcher:closed', handler);
