@@ -90,10 +90,14 @@ export class CosmeticsAgentManager {
 
   /**
    * Genera o actualiza el Resourcepack Universal 3D (RafaCosmeticsPack.zip)
-   * que contiene los modelos de alas 3D, coronas, halos, sombreros y bandanas
-   * compatibles tanto con Vanilla puro como con Entity Model Features (EMF/ETF) / OptiFine / CEM.
+   * que contiene los modelos de alas 3D, coronas, halos, sombreros y bandanas,
+   * e inyecta la skin activa del jugador para que funcione 100% en Vanilla puro sin ningún mod.
    */
-  public async ensure3DCosmeticsResourcepack(instanceDir: string, onLog?: (line: string) => void): Promise<string> {
+  public async ensure3DCosmeticsResourcepack(
+    instanceDir: string,
+    onLog?: (line: string) => void,
+    playerUsername?: string
+  ): Promise<string> {
     const rpDir = path.join(instanceDir, 'resourcepacks');
     if (!fs.existsSync(rpDir)) {
       fs.mkdirSync(rpDir, { recursive: true });
@@ -102,15 +106,49 @@ export class CosmeticsAgentManager {
     const packZipPath = path.join(rpDir, 'RafaCosmeticsPack.zip');
     const zip = new AdmZip();
 
-    // 1. pack.mcmeta universal
+    // 1. pack.mcmeta universal (Compatible con Minecraft 1.8 hasta 1.21.x)
     const packMcmeta = {
       pack: {
         pack_format: 34, // Minecraft 1.20 - 1.21.x compatible
         supported_formats: { min_inclusive: 4, max_inclusive: 48 },
-        description: '§6§lRafa Launcher §7Cosmetics & 3D Models Pack §e(Lunar Style)'
+        description: '§6§lRafa Launcher §7Vanilla Skins & 3D Models Pack §e(Lunar Style)'
       }
     };
     zip.addFile('pack.mcmeta', Buffer.from(JSON.stringify(packMcmeta, null, 2), 'utf-8'));
+
+    // 1.5. Inyección nativa de Skin para Vanilla (Funciona en Singleplayer y Servidores sin ningún mod)
+    const cleanUser = (playerUsername || '').trim();
+    if (cleanUser) {
+      try {
+        const { skinManager } = await import('./skin-manager');
+        const skinPath = await skinManager.ensureLocalSkinPng(cleanUser);
+        if (skinPath && fs.existsSync(skinPath)) {
+          const skinBuffer = fs.readFileSync(skinPath);
+          if (skinBuffer.length > 100) {
+            // Reemplazo de skins base en Minecraft 1.20+ (Wide y Slim)
+            zip.addFile('assets/minecraft/textures/entity/player/wide/steve.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/alex.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/ari.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/efe.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/kai.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/makena.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/noor.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/sunny.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/player/slim/zuri.png', skinBuffer);
+
+            // Reemplazo de skins base en Minecraft Legacy (1.8 a 1.19)
+            zip.addFile('assets/minecraft/textures/entity/steve.png', skinBuffer);
+            zip.addFile('assets/minecraft/textures/entity/alex.png', skinBuffer);
+
+            if (onLog) {
+              onLog(`[SkinSync] 🎨 Skin Vanilla inyectada directamente en el Resource Pack para: ${cleanUser}`);
+            }
+          }
+        }
+      } catch (skinInjectErr) {
+        console.warn('[CosmeticsAgent] Error inyectando skin en el resourcepack:', skinInjectErr);
+      }
+    }
 
     // 2. Modelos 3D CEM para EMF / ETF / Vanilla CEM
     // Alas de Dragón 3D (con huesos animados y aleteo dinámico)
@@ -296,7 +334,11 @@ export class CosmeticsAgentManager {
    * Sincroniza todos los cosméticos activos de todos los usuarios registrados en Supabase
    * para precargar en local antes de lanzar Minecraft.
    */
-  public async syncAllMultiplayerCosmetics(instanceDir: string, onLog?: (line: string) => void): Promise<number> {
+  public async syncAllMultiplayerCosmetics(
+    instanceDir: string,
+    onLog?: (line: string) => void,
+    playerUsername?: string
+  ): Promise<number> {
     try {
       if (onLog) onLog('[CosmeticsSync] Sincronizando cosméticos multijugador desde la nube...');
 
@@ -320,8 +362,8 @@ export class CosmeticsAgentManager {
       const multiplayerMapPath = path.join(instanceDir, 'rafa_multiplayer_cosmetics.json');
       fs.writeFileSync(multiplayerMapPath, JSON.stringify(equippedRows, null, 2), 'utf-8');
 
-      // Generar y actualizar el Resourcepack 3D
-      await this.ensure3DCosmeticsResourcepack(instanceDir, onLog);
+      // Generar y actualizar el Resourcepack 3D & Skin Vanilla
+      await this.ensure3DCosmeticsResourcepack(instanceDir, onLog, playerUsername);
 
       if (onLog) {
         onLog(`[CosmeticsSync] ✅ Sincronizados cosméticos de ${equippedRows.length} jugadores en el servidor.`);

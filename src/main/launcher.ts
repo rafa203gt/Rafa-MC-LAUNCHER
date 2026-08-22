@@ -543,7 +543,7 @@ export class MinecraftLauncher {
       let cosmeticsJvmArgs: string[] = [];
       try {
         const { cosmeticsAgentManager } = await import('./cosmetics-agent');
-        await cosmeticsAgentManager.syncAllMultiplayerCosmetics(instanceDir, onLog);
+        await cosmeticsAgentManager.syncAllMultiplayerCosmetics(instanceDir, onLog, cleanUsername);
         cosmeticsJvmArgs = cosmeticsAgentManager.getJvmInjectionArgs(cleanUsername);
         onLog(`[CosmeticsCore] 🪽 Agente de Cosméticos 3D estilo Lunar inyectado para: ${cleanUsername}`);
       } catch (cosmeticsErr: any) {

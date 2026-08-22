@@ -139,6 +139,37 @@ export class SkinManager {
   }
 
   /**
+   * Asegura que el archivo PNG de la skin de un jugador exista en local y sea válido.
+   */
+  public async ensureLocalSkinPng(username: string): Promise<string | null> {
+    const cleanUsername = (username || '').trim();
+    if (!cleanUsername) return null;
+    const lowerUser = cleanUsername.toLowerCase();
+    const skinsDir = this.getLocalSkinsDir();
+    const localPngPath = path.join(skinsDir, `${lowerUser}.png`);
+
+    if (fs.existsSync(localPngPath) && fs.statSync(localPngPath).size > 100) {
+      return localPngPath;
+    }
+
+    // Si no existe, intentar obtenerla desde la caché/base de datos
+    const skinData = await this.getUserSkin(cleanUsername);
+    if (skinData?.skinData && skinData.skinData.startsWith('data:image/png;base64,')) {
+      const base64Data = skinData.skinData.replace(/^data:image\/png;base64,/, '');
+      const buf = Buffer.from(base64Data, 'base64');
+      fs.writeFileSync(localPngPath, buf);
+      return localPngPath;
+    } else if (skinData?.skinUrl && skinData.skinUrl.startsWith('http')) {
+      try {
+        await this.downloadSkinFile(skinData.skinUrl, localPngPath);
+        return localPngPath;
+      } catch {}
+    }
+
+    return fs.existsSync(localPngPath) ? localPngPath : null;
+  }
+
+  /**
    * Obtiene los datos de la skin de un jugador por su nombre de usuario.
    */
   public async getUserSkin(username: string): Promise<UserSkinData | null> {
