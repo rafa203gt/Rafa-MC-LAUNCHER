@@ -106,7 +106,18 @@ export const API = {
   getUserSkin: (username: string) => ipcRenderer.invoke('skins:get-user', username),
   saveUserSkin: (data: { username: string; skinUrl: string; skinData?: string; model?: 'default' | 'slim'; capeUrl?: string | null }) =>
     ipcRenderer.invoke('skins:save-user', data),
-  syncCommunitySkins: (instanceDir?: string) => ipcRenderer.invoke('skins:sync-community', instanceDir)
+  syncCommunitySkins: (instanceDir?: string) => ipcRenderer.invoke('skins:sync-community', instanceDir),
+
+  // Microsoft / Mojang Auth & Multi-Account
+  getAccounts: () => ipcRenderer.invoke('auth:get-accounts'),
+  getActiveAccount: () => ipcRenderer.invoke('auth:get-active-account'),
+  setActiveAccount: (accountId: string) => ipcRenderer.invoke('auth:set-active-account', accountId),
+  removeAccount: (accountId: string) => ipcRenderer.invoke('auth:remove-account', accountId),
+  addOfflineAccount: (username: string) => ipcRenderer.invoke('auth:add-offline-account', username),
+  startMicrosoftLogin: () => ipcRenderer.invoke('auth:start-microsoft-login'),
+  pollMicrosoftLogin: (deviceCode: string, interval?: number, expiresIn?: number) =>
+    ipcRenderer.invoke('auth:poll-microsoft-login', deviceCode, interval, expiresIn),
+  cancelMicrosoftLogin: () => ipcRenderer.invoke('auth:cancel-microsoft-login')
 };
 
 contextBridge.exposeInMainWorld('launcherAPI', API);

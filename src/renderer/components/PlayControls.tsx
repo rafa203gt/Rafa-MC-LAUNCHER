@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Play, User, Loader2, CheckCircle2, AlertTriangle, ShieldCheck, Cpu, Layers, Box, Sparkles, ChevronDown, Flame } from 'lucide-react';
-import { ProgressEventPayload, MinecraftInstance } from '../types';
+import {
+  Play,
+  User,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
+  ShieldCheck,
+  Cpu,
+  Layers,
+  Box,
+  Sparkles,
+  ChevronDown,
+  Flame,
+  KeyRound,
+  Users
+} from 'lucide-react';
+import { ProgressEventPayload, MinecraftInstance, UserAccount } from '../types';
+import { AccountManagerModal } from './AccountManagerModal';
 
 interface PlayControlsProps {
   username: string;
@@ -28,22 +44,56 @@ export const PlayControls: React.FC<PlayControlsProps> = ({
   onLaunch
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [activeAccount, setActiveAccount] = useState<UserAccount | null>(null);
+
+  const loadActiveAccount = async () => {
+    if (window.launcherAPI?.getActiveAccount) {
+      try {
+        const acc = await window.launcherAPI.getActiveAccount();
+        if (acc) {
+          setActiveAccount(acc);
+          if (acc.username && acc.username !== username) {
+            setUsername(acc.username);
+          }
+        }
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    loadActiveAccount();
+  }, []);
+
   const currentUsername = username.trim() || 'Steve';
-  const avatarUrl = `https://minotar.net/helm/${encodeURIComponent(currentUsername)}/64.png`;
+  const avatarUrl =
+    activeAccount?.skinUrl || `https://minotar.net/helm/${encodeURIComponent(currentUsername)}/64.png`;
 
   const isAtm10 = activeInstance?.id === 'atm10';
   const isVanilla = activeInstance?.modLoader === 'vanilla';
+  const isMicrosoft = activeAccount?.type === 'microsoft';
 
   return (
     <div className="bg-gradient-to-b from-mc-card to-[#0d1017] border border-mc-border/80 rounded-3xl p-6 space-y-6 shadow-2xl relative overflow-hidden">
       {/* Background Ambient Lights */}
       <div className="absolute top-0 right-1/4 w-96 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
+      {/* Account Manager Modal */}
+      <AccountManagerModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        currentUsername={username}
+        onAccountSwitched={(acc) => {
+          setActiveAccount(acc);
+          setUsername(acc.username);
+        }}
+      />
+
       {/* Main Grid: Player Profile + Active Instance Station */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-        {/* User Card (Cols: 4) */}
-        <div className="lg:col-span-5 bg-mc-darker/80 border border-mc-border/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-md">
-          <div className="relative shrink-0">
+        {/* User Card (Cols: 5) */}
+        <div className="lg:col-span-5 bg-mc-darker/80 border border-mc-border/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-md relative group">
+          <div className="relative shrink-0 cursor-pointer" onClick={() => setIsAccountModalOpen(true)}>
             <img
               src={avatarUrl}
               alt="Avatar"
@@ -52,29 +102,75 @@ export const PlayControls: React.FC<PlayControlsProps> = ({
                 (e.target as HTMLImageElement).src = 'https://minotar.net/helm/Steve/64.png';
               }}
             />
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-mc-card flex items-center justify-center shadow">
-              <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-            </div>
+            {isMicrosoft ? (
+              <div
+                className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-600 rounded-full border-2 border-mc-card flex items-center justify-center shadow"
+                title="Cuenta Oficial Microsoft (Premium)"
+              >
+                <ShieldCheck className="w-3 h-3 text-white" />
+              </div>
+            ) : (
+              <div
+                className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-mc-card flex items-center justify-center shadow"
+                title="Cuenta No-Premium"
+              >
+                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+              </div>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
-              <User className="w-3 h-3 text-emerald-400" />
-              Nombre de Jugador (No-Premium)
-            </label>
-            <input
-              type="text"
-              value={username}
-              disabled={isLaunching}
-              onChange={(e) => setUsername(e.target.value)}
-              onBlur={(e) => {
-                const clean = e.target.value.trim() || 'Jugador';
-                setUsername(clean);
-              }}
-              placeholder="Ingresa tu apodo..."
-              maxLength={20}
-              className="w-full bg-black/40 border border-mc-border focus:border-emerald-500 rounded-xl px-3 py-1.5 text-sm font-bold text-white placeholder-slate-500 focus:outline-none transition-all shadow-inner"
-            />
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                {isMicrosoft ? (
+                  <>
+                    <ShieldCheck className="w-3 h-3 text-blue-400" />
+                    <span className="text-blue-400">Microsoft Official</span>
+                  </>
+                ) : (
+                  <>
+                    <User className="w-3 h-3 text-emerald-400" />
+                    <span>Jugador No-Premium</span>
+                  </>
+                )}
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setIsAccountModalOpen(true)}
+                className="text-[10px] font-bold text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-lg border border-mc-border/50"
+              >
+                <Users className="w-3 h-3" />
+                Cuentas
+              </button>
+            </div>
+
+            {isMicrosoft ? (
+              <div
+                onClick={() => setIsAccountModalOpen(true)}
+                className="w-full bg-black/40 border border-blue-500/40 rounded-xl px-3 py-1.5 text-sm font-bold text-white flex items-center justify-between cursor-pointer hover:border-blue-400 transition-all shadow-inner"
+              >
+                <span className="truncate">{username}</span>
+                <span className="text-[10px] text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded font-mono">Premium</span>
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={username}
+                disabled={isLaunching}
+                onChange={(e) => setUsername(e.target.value)}
+                onBlur={(e) => {
+                  const clean = e.target.value.trim() || 'Jugador';
+                  setUsername(clean);
+                  if (window.launcherAPI?.addOfflineAccount) {
+                    window.launcherAPI.addOfflineAccount(clean);
+                  }
+                }}
+                placeholder="Ingresa tu apodo..."
+                maxLength={20}
+                className="w-full bg-black/40 border border-mc-border focus:border-emerald-500 rounded-xl px-3 py-1.5 text-sm font-bold text-white placeholder-slate-500 focus:outline-none transition-all shadow-inner"
+              />
+            )}
           </div>
         </div>
 

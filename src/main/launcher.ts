@@ -442,9 +442,19 @@ export class MinecraftLauncher {
         };
       }
 
-      // Non-Premium offline authentication
-      const cleanUsername = (options.username || settings.username || 'Jugador').trim();
-      const auth = Authenticator.getAuth(cleanUsername);
+      // 5. Autenticación Híbrida: Oficial Microsoft (Premium) u Offline (No-Premium)
+      const { authManager } = await import('./auth-manager');
+      const activeAcc = authManager.getActiveAccount();
+      const cleanUsername = (options.username || activeAcc?.username || settings.username || 'Jugador').trim();
+      let auth: any;
+
+      if (activeAcc && activeAcc.type === 'microsoft') {
+        onLog(`[Auth] 🛡️ Iniciando sesión con cuenta oficial de Microsoft: ${activeAcc.username}`);
+        auth = await authManager.getValidAuthForLaunch();
+      } else {
+        onLog(`[Auth] Iniciando juego en modo Offline / No-Premium: ${cleanUsername}`);
+        auth = Authenticator.getAuth(cleanUsername);
+      }
 
       // Safe RAM Calculation: Prevent allocating more than physical memory & reserve at least 1.5GB for Windows/OS
       const totalSystemRamMB = Math.floor(os.totalmem() / 1024 / 1024);

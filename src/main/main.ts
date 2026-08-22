@@ -403,3 +403,46 @@ ipcMain.handle('skins:sync-community', async (_event, instanceDir?: string) => {
   return skinManager.syncCommunitySkinsToInstance(targetDir);
 });
 
+// 12. Microsoft / Mojang Authentication & Multi-Account Management
+ipcMain.handle('auth:get-accounts', async () => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.getAccounts();
+});
+
+ipcMain.handle('auth:get-active-account', async () => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.getActiveAccount();
+});
+
+ipcMain.handle('auth:set-active-account', async (_event, accountId: string) => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.setActiveAccount(accountId);
+});
+
+ipcMain.handle('auth:remove-account', async (_event, accountId: string) => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.removeAccount(accountId);
+});
+
+ipcMain.handle('auth:add-offline-account', async (_event, username: string) => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.addOfflineAccount(username);
+});
+
+ipcMain.handle('auth:start-microsoft-login', async () => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.startMicrosoftDeviceCode();
+});
+
+ipcMain.handle('auth:poll-microsoft-login', async (_event, deviceCode: string, interval?: number, expiresIn?: number) => {
+  const { authManager } = await import('./auth-manager');
+  return authManager.pollMicrosoftDeviceCode(deviceCode, interval, expiresIn);
+});
+
+ipcMain.handle('auth:cancel-microsoft-login', async () => {
+  const { authManager } = await import('./auth-manager');
+  authManager.cancelDeviceCodePoll();
+  return true;
+});
+
+

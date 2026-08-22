@@ -149,6 +149,28 @@ export interface NewsAnnouncement {
   created_at: string;
 }
 
+export interface UserAccount {
+  id: string;
+  type: 'microsoft' | 'offline';
+  username: string;
+  uuid: string;
+  skinUrl?: string;
+  capeUrl?: string;
+  skinModel?: 'default' | 'slim';
+  hasGameOwnership: boolean;
+  active: boolean;
+  addedAt: string;
+}
+
+export interface DeviceCodeInfo {
+  userCode: string;
+  deviceCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+  message: string;
+}
+
 export interface LauncherAPI {
   launchGame: (options: { username: string; minRam?: number; maxRam?: number; autoConnect?: boolean }) => Promise<void>;
   getAppVersion?: () => Promise<string>;
@@ -183,6 +205,16 @@ export interface LauncherAPI {
   getUserSkin?: (username: string) => Promise<{ username: string; skinUrl: string; skinData?: string; model: 'default' | 'slim'; capeUrl?: string | null } | null>;
   saveUserSkin?: (data: { username: string; skinUrl: string; skinData?: string; model?: 'default' | 'slim'; capeUrl?: string | null }) => Promise<{ success: boolean; message?: string }>;
   syncCommunitySkins?: (instanceDir?: string) => Promise<number>;
+
+  // Microsoft / Mojang Auth & Multi-Account
+  getAccounts?: () => Promise<UserAccount[]>;
+  getActiveAccount?: () => Promise<UserAccount | null>;
+  setActiveAccount?: (accountId: string) => Promise<boolean>;
+  removeAccount?: (accountId: string) => Promise<boolean>;
+  addOfflineAccount?: (username: string) => Promise<UserAccount>;
+  startMicrosoftLogin?: () => Promise<DeviceCodeInfo>;
+  pollMicrosoftLogin?: (deviceCode: string, interval?: number, expiresIn?: number) => Promise<UserAccount>;
+  cancelMicrosoftLogin?: () => Promise<boolean>;
 }
 
 declare global {
