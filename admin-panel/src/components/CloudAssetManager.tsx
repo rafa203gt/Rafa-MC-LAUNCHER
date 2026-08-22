@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import JSZip from 'jszip';
 import {
   Upload,
@@ -27,7 +27,16 @@ import {
   Edit3,
   FilePlus,
   Palette,
-  ExternalLink
+  ExternalLink,
+  Flame,
+  Box,
+  Sword,
+  Shield,
+  Zap,
+  Star,
+  Compass,
+  Cpu,
+  HardDrive
 } from 'lucide-react';
 import { gitHubStorage, GitHubAsset } from '../github-storage';
 import { supabase, RemoteInstance, ModpackMod, Shaderpack } from '../supabase';
@@ -45,11 +54,11 @@ export const CloudAssetManager: React.FC = () => {
   const [instances, setInstances] = useState<RemoteInstance[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>('atm10');
   const [selectedInstance, setSelectedInstance] = useState<RemoteInstance | null>(null);
-  const [isEditingParams, setIsEditingParams] = useState(false);
   const [instanceParamsDraft, setInstanceParamsDraft] = useState<Partial<RemoteInstance>>({});
+  const [isSavingParams, setIsSavingParams] = useState(false);
 
   // Tabs & Security state
-  const [activeTab, setActiveTab] = useState<'mods' | 'modpack_zip' | 'configs' | 'shaders' | 'manifest'>('mods');
+  const [activeTab, setActiveTab] = useState<'settings' | 'mods' | 'configs' | 'shaders' | 'modpack_zip' | 'manifest'>('settings');
   const [token, setToken] = useState(gitHubStorage.getToken());
   const [repo, setRepo] = useState(gitHubStorage.getRepo());
   const [showTokenModal, setShowTokenModal] = useState(false);
@@ -74,6 +83,22 @@ export const CloudAssetManager: React.FC = () => {
   const [configSavedNotice, setConfigSavedNotice] = useState(false);
   const [isCreatingConfig, setIsCreatingConfig] = useState(false);
   const [newConfigPath, setNewConfigPath] = useState('');
+  const [configSearchTerm, setConfigSearchTerm] = useState('');
+  const [configFilterExt, setConfigFilterExt] = useState<'all' | 'toml' | 'json' | 'snbt' | 'cfg' | 'options'>('all');
+
+  const filteredConfigs = useMemo(() => {
+    return configsList.filter((c) => {
+      const q = configSearchTerm.toLowerCase();
+      const matches = !q || c.name.toLowerCase().includes(q) || c.path.toLowerCase().includes(q);
+      if (!matches) return false;
+      if (configFilterExt === 'toml') return c.name.endsWith('.toml');
+      if (configFilterExt === 'json') return c.name.endsWith('.json') || c.name.endsWith('.json5');
+      if (configFilterExt === 'snbt') return c.name.endsWith('.snbt');
+      if (configFilterExt === 'cfg') return c.name.endsWith('.cfg') || c.name.endsWith('.ini');
+      if (configFilterExt === 'options') return c.name === 'options.txt';
+      return true;
+    });
+  }, [configsList, configSearchTerm, configFilterExt]);
 
   // Shaders & Textures state
   const [shadersList, setShadersList] = useState<Shaderpack[]>([]);
@@ -164,34 +189,25 @@ export const CloudAssetManager: React.FC = () => {
           (m) =>
             m.category === 'config' ||
             m.category === 'configs' ||
-            m.file_path.startsWith('config/') ||
-            m.file_path.startsWith('defaultconfigs/') ||
-            m.file_path.startsWith('kubejs/') ||
-            m.file_name.endsWith('.toml') ||
-            m.file_name.endsWith('.json') ||
-            m.file_name.endsWith('.snbt') ||
-            m.file_name.endsWith('.cfg') ||
-            m.file_name.endsWith('.ini')
+            m.file_path?.startsWith('config/') ||
+            m.file_path?.startsWith('defaultconfigs/') ||
+            m.file_path?.startsWith('kubejs/') ||
+            m.file_name?.endsWith('.toml') ||
+            m.file_name?.endsWith('.json') ||
+            m.file_name?.endsWith('.json5') ||
+            m.file_name?.endsWith('.snbt') ||
+            m.file_name?.endsWith('.cfg') ||
+            m.file_name?.endsWith('.ini') ||
+            m.file_name === 'options.txt'
         );
 
-        const loadedConfigs: ConfigItem[] = await Promise.all(
-          configsFromDb.map(async (c) => {
-            let text = '';
-            if (c.download_url) {
-              try {
-                const res = await fetch(c.download_url);
-                if (res.ok) text = await res.text();
-              } catch {}
-            }
-            return {
-              id: c.id,
-              name: c.file_name,
-              path: c.file_path || `config/${c.file_name}`,
-              content: text || `# Configuración: ${c.file_name}\n`,
-              downloadUrl: c.download_url
-            };
-          })
-        );
+        const loadedConfigs: ConfigItem[] = configsFromDb.map((c) => ({
+          id: c.id,
+          name: c.file_name,
+          path: c.file_path || `config/${c.file_name}`,
+          content: c.content || `# Configuración: ${c.file_name}\n`,
+          downloadUrl: c.download_url
+        }));
 
         setConfigsList(loadedConfigs);
         setActiveConfigIndex(0);
@@ -249,38 +265,6 @@ export const CloudAssetManager: React.FC = () => {
     }
   };
 
-  // Save instance parameters
-  const handleSaveInstanceParams = async () => {
-    if (!selectedInstance) return;
-    try {
-      setIsLoading(true);
-      const payload = {
-        name: instanceParamsDraft.name,
-        description: instanceParamsDraft.description,
-        minecraft_version: instanceParamsDraft.minecraft_version,
-        mod_loader: instanceParamsDraft.mod_loader,
-        mod_loader_version: instanceParamsDraft.mod_loader_version,
-        custom_ram: Number(instanceParamsDraft.custom_ram) || 8192,
-        server_ip: instanceParamsDraft.server_ip,
-        server_port: Number(instanceParamsDraft.server_port) || 25565,
-        updated_at: new Date().toISOString()
-      };
-
-      let { error } = await supabase.from('instances').update(payload).eq('id', selectedInstance.id);
-      if (error) {
-        const alt = await supabase.from('remote_instances').update(payload).eq('id', selectedInstance.id);
-        if (alt.error) throw alt.error;
-      }
-
-      alert(`✅ ¡Parámetros de la instancia "${instanceParamsDraft.name}" actualizados con éxito!`);
-      setIsEditingParams(false);
-      await loadInstances();
-    } catch (err: any) {
-      alert(`Error actualizando parámetros: ${err.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Upload single / bulk files to GitHub CDN + Supabase
   const handleFileUpload = async (files: FileList | null, category = 'mods') => {
@@ -500,18 +484,67 @@ export const CloudAssetManager: React.FC = () => {
     }
   };
 
+  // Save current instance parameters
+  const handleSaveInstanceParams = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedInstance) return;
+    setIsSavingParams(true);
+    try {
+      const payload = {
+        name: instanceParamsDraft.name || selectedInstance.name,
+        description: instanceParamsDraft.description || '',
+        minecraft_version: instanceParamsDraft.minecraft_version || '1.21.1',
+        mod_loader: instanceParamsDraft.mod_loader || 'neoforge',
+        mod_loader_version: instanceParamsDraft.mod_loader_version || '',
+        server_ip: instanceParamsDraft.server_ip,
+        server_port: Number(instanceParamsDraft.server_port) || 25565,
+        custom_ram: Number(instanceParamsDraft.custom_ram) || 4096,
+        icon: instanceParamsDraft.icon || 'flame',
+        banner_url: instanceParamsDraft.banner_url,
+        is_official: Boolean(instanceParamsDraft.is_official),
+        is_active: Boolean(instanceParamsDraft.is_active),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('instances')
+        .update(payload)
+        .eq('id', selectedInstance.id);
+
+      if (error) throw error;
+
+      await supabase
+        .from('launcher_config')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', 'global');
+
+      setSelectedInstance((prev) => (prev ? { ...prev, ...payload } : null));
+      alert(`✅ ¡Parámetros de "${payload.name}" guardados y sincronizados en vivo!`);
+      await loadInstances(selectedInstance.id);
+    } catch (err: any) {
+      alert(`Error guardando parámetros: ${err.message}`);
+    } finally {
+      setIsSavingParams(false);
+    }
+  };
+
   // Save current config file text content
   const handleSaveCurrentConfig = async () => {
-    if (!selectedInstance || !configsList[activeConfigIndex]) return;
-    const currentCfg = configsList[activeConfigIndex];
+    if (!selectedInstance || !filteredConfigs[activeConfigIndex]) return;
+    const currentCfg = filteredConfigs[activeConfigIndex];
     setIsLoading(true);
-    const releaseTag = `modpack-${selectedInstance.id}-assets`;
 
     try {
-      const blob = new Blob([configDraft], { type: 'text/plain;charset=utf-8' });
-      const file = new File([blob], currentCfg.name.split('/').pop() || currentCfg.name);
-
-      const uploaded = await gitHubStorage.uploadAsset(file, undefined, releaseTag);
+      let downloadUrl = currentCfg.downloadUrl;
+      if (token && repo) {
+        try {
+          const releaseTag = `modpack-${selectedInstance.id}-assets`;
+          const blob = new Blob([configDraft], { type: 'text/plain;charset=utf-8' });
+          const file = new File([blob], currentCfg.name.split('/').pop() || currentCfg.name);
+          const uploaded = await gitHubStorage.uploadAsset(file, undefined, releaseTag);
+          downloadUrl = uploaded.url;
+        } catch {}
+      }
 
       await supabase.from('modpack_mods').upsert(
         {
@@ -519,19 +552,25 @@ export const CloudAssetManager: React.FC = () => {
           mod_name: currentCfg.name,
           file_name: currentCfg.name.split('/').pop() || currentCfg.name,
           file_path: currentCfg.path,
-          file_size: uploaded.size,
-          sha1: uploaded.sha1,
-          download_url: uploaded.url,
+          file_size: new Blob([configDraft]).size,
+          content: configDraft,
+          download_url: downloadUrl || '',
           is_enabled: true,
-          category: 'config'
+          category: 'config',
+          updated_at: new Date().toISOString()
         },
-        { onConflict: 'instance_id,file_name' }
+        { onConflict: 'instance_id,file_path' }
       );
 
-      const updated = [...configsList];
-      updated[activeConfigIndex].content = configDraft;
-      updated[activeConfigIndex].downloadUrl = uploaded.url;
+      const updated = configsList.map((c) =>
+        c.id === currentCfg.id || c.path === currentCfg.path ? { ...c, content: configDraft, downloadUrl } : c
+      );
       setConfigsList(updated);
+
+      await supabase
+        .from('launcher_config')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', 'global');
 
       setConfigSavedNotice(true);
       setTimeout(() => setConfigSavedNotice(false), 3000);
@@ -545,33 +584,72 @@ export const CloudAssetManager: React.FC = () => {
   // Create brand new config file
   const handleCreateNewConfigFile = async () => {
     if (!newConfigPath.trim() || !selectedInstance) return;
-    const cleanPath = newConfigPath.startsWith('config/') ? newConfigPath.trim() : `config/${newConfigPath.trim()}`;
+    const cleanPath = newConfigPath.startsWith('config/') || newConfigPath.startsWith('defaultconfigs/') || newConfigPath.startsWith('kubejs/')
+      ? newConfigPath.trim()
+      : `config/${newConfigPath.trim()}`;
     const fileName = cleanPath.split('/').pop() || cleanPath;
 
-    const newEntry: ConfigItem = {
-      name: fileName,
-      path: cleanPath,
-      content: `# Configuración: ${fileName}\n`
-    };
+    try {
+      const { data, error } = await supabase
+        .from('modpack_mods')
+        .insert({
+          instance_id: selectedInstance.id,
+          mod_name: cleanPath,
+          file_name: fileName,
+          file_path: cleanPath,
+          file_size: 30,
+          content: `# Configuración: ${fileName}\n# Modpack: ${selectedInstance.name}\n`,
+          is_enabled: true,
+          category: 'config'
+        })
+        .select()
+        .single();
 
-    const nextList = [newEntry, ...configsList];
-    setConfigsList(nextList);
-    setActiveConfigIndex(0);
-    setConfigDraft(newEntry.content);
-    setIsCreatingConfig(false);
-    setNewConfigPath('');
+      if (error) throw error;
+
+      const newEntry: ConfigItem = {
+        id: data.id,
+        name: fileName,
+        path: cleanPath,
+        content: data.content
+      };
+
+      setConfigsList([newEntry, ...configsList]);
+      setConfigSearchTerm('');
+      setActiveConfigIndex(0);
+      setConfigDraft(newEntry.content);
+      setIsCreatingConfig(false);
+      setNewConfigPath('');
+      alert(`✅ Archivo "${cleanPath}" creado exitosamente.`);
+    } catch (err: any) {
+      alert(`Error creando archivo: ${err.message}`);
+    }
   };
 
   // Delete config file
-  const handleDeleteConfig = async (cfg: ConfigItem, index: number) => {
-    if (!confirm(`¿Estás seguro de eliminar el archivo "${cfg.name}"?`)) return;
-    if (cfg.id) {
-      await supabase.from('modpack_mods').delete().eq('id', cfg.id);
+  const handleDeleteConfig = async (cfg: ConfigItem, idx: number) => {
+    if (!selectedInstance) return;
+    if (!confirm(`¿Eliminar definitivamente "${cfg.path || cfg.name}"?`)) return;
+
+    try {
+      if (cfg.id) {
+        await supabase.from('modpack_mods').delete().eq('id', cfg.id);
+      } else {
+        await supabase
+          .from('modpack_mods')
+          .delete()
+          .eq('instance_id', selectedInstance.id)
+          .eq('file_path', cfg.path);
+      }
+      setConfigsList((prev) => prev.filter((c) => c.path !== cfg.path));
+      if (activeConfigIndex >= idx && activeConfigIndex > 0) {
+        setActiveConfigIndex((prev) => prev - 1);
+      }
+    } catch (err: any) {
+      alert(`Error al eliminar config: ${err.message}`);
     }
-    const nextList = configsList.filter((_, idx) => idx !== index);
-    setConfigsList(nextList);
-    setActiveConfigIndex(Math.max(0, index - 1));
   };
+
 
   // Add Manual Shaderpack
   const handleAddManualShader = async (e: React.FormEvent) => {
@@ -829,18 +907,6 @@ export const CloudAssetManager: React.FC = () => {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
             </button>
-
-            <button
-              onClick={() => setIsEditingParams(!isEditingParams)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
-                isEditingParams
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
-              }`}
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              {isEditingParams ? 'Cerrar Parámetros' : 'Editar Parámetros'}
-            </button>
           </div>
 
           {selectedInstance && (
@@ -852,112 +918,22 @@ export const CloudAssetManager: React.FC = () => {
                 Loader: <strong className="text-purple-400">{selectedInstance.mod_loader} {selectedInstance.mod_loader_version}</strong>
               </span>
               <span className="bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 font-mono">
-                RAM: <strong className="text-teal-400">{selectedInstance.custom_ram || 8192} MB</strong>
+                RAM: <strong className="text-teal-400">{selectedInstance.custom_ram || 6144} MB</strong>
               </span>
             </div>
           )}
         </div>
-
-        {/* Quick Parameters Editor Drawer */}
-        {isEditingParams && selectedInstance && (
-          <div className="mt-5 p-5 bg-slate-950 border border-indigo-500/30 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-black text-white flex items-center gap-2">
-                <Settings className="w-4 h-4 text-indigo-400" />
-                Configurar Parámetros de "{selectedInstance.name}"
-              </h3>
-              <button
-                onClick={handleSaveInstanceParams}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
-              >
-                <Save className="w-3.5 h-3.5" />
-                Guardar Cambios
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre</label>
-                <input
-                  type="text"
-                  value={instanceParamsDraft.name || ''}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, name: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versión MC</label>
-                <input
-                  type="text"
-                  value={instanceParamsDraft.minecraft_version || ''}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, minecraft_version: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Mod Loader</label>
-                <select
-                  value={instanceParamsDraft.mod_loader || 'neoforge'}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, mod_loader: e.target.value as any })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  <option value="neoforge">NeoForge</option>
-                  <option value="forge">Forge</option>
-                  <option value="fabric">Fabric</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Versión Loader</label>
-                <input
-                  type="text"
-                  value={instanceParamsDraft.mod_loader_version || ''}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, mod_loader_version: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">RAM (MB)</label>
-                <input
-                  type="number"
-                  value={instanceParamsDraft.custom_ram || 8192}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, custom_ram: Number(e.target.value) })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">IP Servidor</label>
-                <input
-                  type="text"
-                  value={instanceParamsDraft.server_ip || ''}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, server_ip: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Puerto</label>
-                <input
-                  type="number"
-                  value={instanceParamsDraft.server_port || 25565}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, server_port: Number(e.target.value) })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descripción</label>
-                <input
-                  type="text"
-                  value={instanceParamsDraft.description || ''}
-                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, description: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-
       {/* Navigation Sub-Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Settings className="w-4 h-4" /> ⚙️ Parámetros ({selectedInstance?.name || 'Instancia'})
+        </button>
         <button
           onClick={() => setActiveTab('mods')}
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
@@ -965,14 +941,6 @@ export const CloudAssetManager: React.FC = () => {
           }`}
         >
           <Layers className="w-4 h-4" /> Mods ({mods.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('modpack_zip')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'modpack_zip' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <FolderArchive className="w-4 h-4" /> Extractor .ZIP
         </button>
         <button
           onClick={() => setActiveTab('configs')}
@@ -991,6 +959,14 @@ export const CloudAssetManager: React.FC = () => {
           <Sparkles className="w-4 h-4" /> Shaders y Texturas ({shadersList.length})
         </button>
         <button
+          onClick={() => setActiveTab('modpack_zip')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === 'modpack_zip' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FolderArchive className="w-4 h-4" /> Extractor .ZIP
+        </button>
+        <button
           onClick={() => setActiveTab('manifest')}
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'manifest' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-900/60 text-slate-400 hover:text-slate-200'
@@ -999,6 +975,202 @@ export const CloudAssetManager: React.FC = () => {
           <FileText className="w-4 h-4" /> Manifiesto JSON
         </button>
       </div>
+
+      {/* TAB 0: PARÁMETROS DE LA INSTANCIA */}
+      {activeTab === 'settings' && selectedInstance && (
+        <form onSubmit={handleSaveInstanceParams} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl animate-in fade-in">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Settings className="w-5 h-5 text-indigo-400" />
+                Parámetros y Ajustes de "{selectedInstance.name}"
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Edita la versión de Minecraft, mod loader, memoria RAM, IP del servidor y personalización visual.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSavingParams}
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {isSavingParams ? 'Guardando...' : 'Guardar y Publicar en Vivo'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Nombre */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Nombre del Modpack / Instancia</label>
+              <input
+                type="text"
+                required
+                value={instanceParamsDraft.name || ''}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, name: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-bold"
+              />
+            </div>
+
+            {/* Versión Minecraft */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Versión de Minecraft</label>
+              <input
+                type="text"
+                required
+                placeholder="ej: 1.21.1, 1.21.4, 1.20.1"
+                value={instanceParamsDraft.minecraft_version || ''}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, minecraft_version: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+              />
+            </div>
+
+            {/* Mod Loader */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Mod Loader</label>
+              <select
+                value={instanceParamsDraft.mod_loader || 'neoforge'}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, mod_loader: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 cursor-pointer font-bold"
+              >
+                <option value="neoforge">NeoForge (Recomendado 1.20.4+)</option>
+                <option value="forge">Forge</option>
+                <option value="fabric">Fabric</option>
+                <option value="quilt">Quilt</option>
+                <option value="vanilla">Vanilla Puro</option>
+              </select>
+            </div>
+
+            {/* Versión Loader */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Versión del Mod Loader</label>
+              <input
+                type="text"
+                placeholder="ej: 21.1.86, 47.2.0, 0.15.11"
+                value={instanceParamsDraft.mod_loader_version || ''}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, mod_loader_version: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+              />
+            </div>
+
+            {/* RAM Asignada */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="text-xs font-bold text-slate-300">RAM Recomendada</label>
+                <span className="text-xs font-mono font-bold text-indigo-400">
+                  {((instanceParamsDraft.custom_ram || 6144) / 1024).toFixed(1)} GB ({instanceParamsDraft.custom_ram || 6144} MB)
+                </span>
+              </div>
+              <input
+                type="range"
+                min="2048"
+                max="16384"
+                step="512"
+                value={instanceParamsDraft.custom_ram || 6144}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, custom_ram: Number(e.target.value) })}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Servidor IP & Puerto */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">IP Servidor Dedicado</label>
+                <input
+                  type="text"
+                  placeholder="ej: play.miservidor.com"
+                  value={instanceParamsDraft.server_ip || ''}
+                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, server_ip: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">Puerto</label>
+                <input
+                  type="number"
+                  placeholder="25565"
+                  value={instanceParamsDraft.server_port || 25565}
+                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, server_port: Number(e.target.value) })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Icono */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Icono del Modpack</label>
+              <select
+                value={instanceParamsDraft.icon || 'flame'}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, icon: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 cursor-pointer font-bold"
+              >
+                <option value="flame">🔥 Llama / Fuego</option>
+                <option value="sword">⚔️ Espada de Batalla</option>
+                <option value="shield">🛡️ Escudo Defensor</option>
+                <option value="box">📦 Caja / Modpack</option>
+                <option value="sparkles">✨ Chispas Mágicas</option>
+                <option value="zap">⚡ Rayo Cósmico</option>
+                <option value="compass">🧭 Brújula de Aventura</option>
+                <option value="cpu">💻 CPU Tech</option>
+              </select>
+            </div>
+
+            {/* Banner URL */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">URL de Imagen de Banner (Opcional)</label>
+              <input
+                type="url"
+                placeholder="https://images.unsplash.com/..."
+                value={instanceParamsDraft.banner_url || ''}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, banner_url: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+              />
+            </div>
+
+            {/* Descripción */}
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">Descripción o Notas para los Jugadores</label>
+              <textarea
+                rows={2}
+                placeholder="Modpack oficial con más de 400 mods tecnológicos, mágicos y de exploración..."
+                value={instanceParamsDraft.description || ''}
+                onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, description: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-indigo-500 leading-relaxed resize-none"
+              />
+            </div>
+
+            {/* Switches de Visibilidad */}
+            <div className="md:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-6 pt-2">
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(instanceParamsDraft.is_active)}
+                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, is_active: e.target.checked })}
+                  className="w-4 h-4 rounded text-indigo-600 accent-indigo-600 cursor-pointer"
+                />
+                <div>
+                  <span className="text-xs font-bold text-white block">🟢 Visible en el Launcher</span>
+                  <span className="text-[11px] text-slate-400">Si está marcado, los jugadores verán y podrán jugar este modpack.</span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(instanceParamsDraft.is_official)}
+                  onChange={(e) => setInstanceParamsDraft({ ...instanceParamsDraft, is_official: e.target.checked })}
+                  className="w-4 h-4 rounded text-indigo-600 accent-indigo-600 cursor-pointer"
+                />
+                <div>
+                  <span className="text-xs font-bold text-white block">⭐ Modpack Oficial del Servidor</span>
+                  <span className="text-[11px] text-slate-400">Muestra la insignia dorada oficial en el catálogo.</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </form>
+      )}
 
       {/* TAB 1: MODS */}
       {activeTab === 'mods' && (
@@ -1137,10 +1309,10 @@ export const CloudAssetManager: React.FC = () => {
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-indigo-400" />
-                Archivos de Configuración de "{selectedInstance?.name}"
+                Archivos de Configuración de "{selectedInstance?.name}" ({configsList.length} disponibles)
               </h3>
               <p className="text-xs text-slate-400">
-                Edita o sube archivos de configuración (.toml, .json, .snbt, .cfg, .ini) que se sincronizan con los jugadores.
+                Edita configs (.toml, .json, .snbt, .cfg, .ini, options.txt) con sincronización en tiempo real hacia los jugadores.
               </p>
             </div>
 
@@ -1197,6 +1369,82 @@ export const CloudAssetManager: React.FC = () => {
             </div>
           )}
 
+          {/* Search & Format Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800/80 p-3 rounded-2xl">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Buscar configs (ej: jei, apotheosis, options.txt, client)..."
+                value={configSearchTerm}
+                onChange={(e) => {
+                  setConfigSearchTerm(e.target.value);
+                  setActiveConfigIndex(0);
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-8 py-1.5 text-xs text-white outline-none focus:border-indigo-500 font-mono"
+              />
+              {configSearchTerm && (
+                <button
+                  onClick={() => setConfigSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-300"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] font-bold">
+              <button
+                onClick={() => setConfigFilterExt('all')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  configFilterExt === 'all' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Todos ({configsList.length})
+              </button>
+              <button
+                onClick={() => setConfigFilterExt('toml')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  configFilterExt === 'toml' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                .TOML
+              </button>
+              <button
+                onClick={() => setConfigFilterExt('json')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  configFilterExt === 'json' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                .JSON
+              </button>
+              <button
+                onClick={() => setConfigFilterExt('snbt')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  configFilterExt === 'snbt' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                .SNBT
+              </button>
+              <button
+                onClick={() => setConfigFilterExt('cfg')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  configFilterExt === 'cfg' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                .CFG
+              </button>
+              <button
+                onClick={() => setConfigFilterExt('options')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  configFilterExt === 'options' ? 'bg-indigo-600 text-white shadow' : 'bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                options.txt
+              </button>
+            </div>
+          </div>
+
           {configsList.length === 0 ? (
             <div className="text-center py-16 bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl p-8 space-y-4 shadow-inner">
               <FileCode className="w-10 h-10 text-indigo-400 mx-auto opacity-70" />
@@ -1216,51 +1464,68 @@ export const CloudAssetManager: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
               {/* Sidebar list of configs */}
-              <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase">Archivos ({configsList.length})</h4>
+              <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    {filteredConfigs.length} de {configsList.length} configs
+                  </span>
                 </div>
-                <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
-                  {configsList.map((cfg, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex items-center justify-between p-2 rounded-xl text-xs font-mono transition-all group ${
-                        activeConfigIndex === idx
-                          ? 'bg-indigo-600 text-white shadow-md font-bold'
-                          : 'bg-slate-950 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <button
-                        onClick={() => setActiveConfigIndex(idx)}
-                        className="flex-1 text-left truncate pr-2"
-                      >
-                        {cfg.path || cfg.name}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteConfig(cfg, idx)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                <div className="space-y-1 max-h-[520px] overflow-y-auto pr-1">
+                  {filteredConfigs.length === 0 ? (
+                    <div className="text-xs text-slate-500 text-center py-6">
+                      No se encontraron configs con "{configSearchTerm}"
                     </div>
-                  ))}
+                  ) : (
+                    filteredConfigs.map((cfg, idx) => (
+                      <div
+                        key={cfg.id || idx}
+                        className={`flex items-center justify-between p-2 rounded-xl text-xs font-mono transition-all group ${
+                          activeConfigIndex === idx
+                            ? 'bg-indigo-600 text-white shadow-md font-bold'
+                            : 'bg-slate-950/80 text-slate-400 hover:text-slate-200 hover:bg-slate-950'
+                        }`}
+                      >
+                        <button
+                          onClick={() => {
+                            setActiveConfigIndex(idx);
+                            setConfigDraft(cfg.content || '');
+                          }}
+                          className="flex-1 text-left truncate pr-2 text-[11px]"
+                          title={cfg.path || cfg.name}
+                        >
+                          {cfg.path || cfg.name}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteConfig(cfg, idx)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-300 transition-opacity"
+                          title="Eliminar archivo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
               {/* Code Editor */}
               <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <span className="text-xs font-mono font-bold text-indigo-300">
-                    {configsList[activeConfigIndex]?.path || configsList[activeConfigIndex]?.name || 'Editor'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-indigo-300">
+                      {filteredConfigs[activeConfigIndex]?.path || filteredConfigs[activeConfigIndex]?.name || 'Editor'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      ({configDraft.split('\n').length} líneas · {(configDraft.length / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
                   <button
                     onClick={handleSaveCurrentConfig}
-                    disabled={isLoading || !configsList.length}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                    disabled={isLoading || !filteredConfigs.length}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    {configSavedNotice ? '✅ ¡Guardado y Sincronizado!' : 'Guardar Archivo'}
+                    {configSavedNotice ? '✅ ¡Guardado y Sincronizado en Vivo!' : 'Guardar Configuración'}
                   </button>
                 </div>
 
@@ -1268,7 +1533,8 @@ export const CloudAssetManager: React.FC = () => {
                   value={configDraft}
                   onChange={(e) => setConfigDraft(e.target.value)}
                   placeholder="# Escribe aquí la configuración..."
-                  className="w-full flex-1 min-h-[460px] bg-slate-950 border border-slate-800/90 rounded-2xl p-4 font-mono text-xs text-slate-200 outline-none focus:border-indigo-500/60 leading-relaxed shadow-inner"
+                  spellCheck={false}
+                  className="w-full flex-1 min-h-[480px] bg-slate-950 border border-slate-800/90 rounded-2xl p-4 font-mono text-xs text-slate-200 outline-none focus:border-indigo-500/60 leading-relaxed shadow-inner"
                 />
               </div>
             </div>
