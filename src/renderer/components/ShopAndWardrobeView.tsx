@@ -34,6 +34,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { ShopCosmetic, UserEquippedCosmetics, UserEconomy } from '../types';
+import { Cosmetics3DRenderer } from '../utils/cosmetics3d';
 
 interface ShopAndWardrobeViewProps {
   currentUsername: string;
@@ -71,6 +72,7 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
   // 3D Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewerRef = useRef<SkinViewer | null>(null);
+  const cosmeticsRendererRef = useRef<Cosmetics3DRenderer | null>(null);
   const [animationType, setAnimationType] = useState<'idle' | 'walk' | 'run' | 'fly' | 'wave'>('idle');
   const [isPaused, setIsPaused] = useState(false);
 
@@ -112,6 +114,11 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
   useEffect(() => {
     if (!canvasRef.current) return;
 
+    if (cosmeticsRendererRef.current) {
+      cosmeticsRendererRef.current.dispose();
+      cosmeticsRendererRef.current = null;
+    }
+
     if (viewerRef.current) {
       viewerRef.current.dispose();
       viewerRef.current = null;
@@ -135,29 +142,45 @@ export const ShopAndWardrobeView: React.FC<ShopAndWardrobeViewProps> = ({ curren
     viewer.animation = anim;
 
     viewerRef.current = viewer;
+    cosmeticsRendererRef.current = new Cosmetics3DRenderer(viewer);
 
     return () => {
+      if (cosmeticsRendererRef.current) {
+        cosmeticsRendererRef.current.dispose();
+        cosmeticsRendererRef.current = null;
+      }
       viewer.dispose();
       viewerRef.current = null;
     };
   }, [cleanUsername]);
 
-  // Update 3D Viewer skin & capes when preview/equipped changes
+  // Update 3D Viewer skin & all 3D cosmetics when preview/equipped/catalog changes
   useEffect(() => {
-    if (!viewerRef.current) return;
+    if (!viewerRef.current || !cosmeticsRendererRef.current) return;
 
-    // Determine active cape texture (preview takes precedence if selected, otherwise equipped)
+    // Resolver items activos por slot
     const activeCape =
       previewCosmetic?.category === 'cape'
-        ? previewCosmetic.texture_url
-        : equipped.cape?.texture_url || null;
+        ? previewCosmetic
+        : equipped.cape || catalog.find((c) => c.id === equipped.cape_id) || null;
 
-    if (activeCape) {
-      viewerRef.current.loadCape(activeCape);
-    } else {
-      viewerRef.current.resetCape();
-    }
-  }, [equipped, previewCosmetic]);
+    const activeWings =
+      previewCosmetic?.category === 'wings'
+        ? previewCosmetic
+        : equipped.wings || catalog.find((c) => c.id === equipped.wings_id) || null;
+
+    const activeHat =
+      previewCosmetic?.category === 'hat'
+        ? previewCosmetic
+        : equipped.hat || catalog.find((c) => c.id === equipped.hat_id) || null;
+
+    const activeBandana =
+      previewCosmetic?.category === 'bandana'
+        ? previewCosmetic
+        : equipped.bandana || catalog.find((c) => c.id === equipped.bandana_id) || null;
+
+    cosmeticsRendererRef.current.updateCosmetics(activeCape, activeWings, activeHat, activeBandana);
+  }, [equipped, previewCosmetic, catalog]);
 
   // Handle animation changes
   const handleSetAnimation = (type: 'idle' | 'walk' | 'run' | 'fly' | 'wave') => {
